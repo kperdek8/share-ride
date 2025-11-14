@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Backend - FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shareride-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
+      - MONGODB_URL=mongodb://mongodb:27017/shareride
+    depends_on:
+      - postgres
+      - mongodb
+    networks:
+      - shareride-network
+
+  # Frontend - Flutter
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: shareride-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+    networks:
+      - shareride-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: shareride-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=shareride
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - shareride-network
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: shareride-mongodb
+    environment:
+      - MONGO_INITDB_DATABASE=shareride
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - shareride-network
+
+volumes:
+  postgres_data:
+  mongodb_data:
+
+networks:
+  shareride-network:
+    driver: bridge
+

@@ -1,0 +1,17 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+ios/
+android/
+web/
+*.iml
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
