@@ -34,11 +34,21 @@ env/
 .pub/
 build/
 ios/
-android/
 web/
 *.iml
 .idea/
 .vscode/
+
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/.settings/
+android/.classpath
+android/.project
 
 # Environment
 .env

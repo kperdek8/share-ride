@@ -6,7 +6,6 @@
 .pub/
 build/
 ios/
-android/
 web/
 *.iml
 .idea/
@@ -14,4 +13,8 @@ web/
 *.swp
 *.swo
 *~
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
 
