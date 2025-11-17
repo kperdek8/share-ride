@@ -1,8 +1,8 @@
 version: '3.8'
 
 services:
-  # Backend - FastAPI
-  backend:
+  # Backend - Test FastAPI
+  backend_test:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -11,6 +11,25 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
+      - MONGODB_URL=mongodb://mongodb:27017/shareride
+    depends_on:
+      - postgres
+      - mongodb
+    networks:
+      - shareride-network
+
+  # Backend - Test FastAPI
+  backend_matching_service:
+    build:
+      context: ./backend/matching_service
+      dockerfile: Dockerfile
+    container_name: shareride-backend-matching-service
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend/matching_service:/app
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
       - MONGODB_URL=mongodb://mongodb:27017/shareride
