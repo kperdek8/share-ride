@@ -1,5 +1,5 @@
-name: shareride
-description: Aplikacja ShareRide - wspólne przejazdy
+name: share_ride
+description: Aplikacja ShareRide - współdzielenie przejazdów
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,8 +9,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+  google_maps_flutter: ^2.5.0
+  geolocator: ^10.1.0
+  permission_handler: ^11.0.1
   http: ^1.1.0
+  geocoding: ^3.0.0
 
 dev_dependencies:
   flutter_test:
@@ -19,4 +24,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/
 

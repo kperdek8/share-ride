@@ -60,3 +60,14 @@ android/.project
 # OS
 .DS_Store
 Thumbs.db
+
+# Flutter
+flutter/ephemeral/
+flutter/
+flutter_export_environment.sh
+flutter_export_environment.sh.backup
+flutter_export_environment.sh.backup.1
+flutter_export_environment.sh.backup.2
+flutter_export_environment.sh.backup.3
+flutter_export_environment.sh.backup.4
+flutter_export_environment.sh.backup.5
