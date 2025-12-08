@@ -4,12 +4,20 @@ from database import (
     mongo_client,  # Potrzebne do zamknięcia połączenia
     redis_client,  # Potrzebne do zamknięcia połączenia
     remove_driver_availability,
+    set_driver_available,
     update_ride_location,
+    update_ride_route,
     update_ride_status,
 )
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from models import MessageResponse, RideCreate, RideLocation, RideStatusUpdate
+from models import (
+    MessageResponse,
+    RideCreate,
+    RideLocation,
+    RideRouteUpdate,
+    RideStatusUpdate,
+)
 
 app = FastAPI(
     title="ShareRide Ride Management Service",
@@ -63,6 +71,28 @@ async def create_ride_endpoint(ride_data: RideCreate):
         )
 
 
+@app.patch("/api/rides/{ride_id}/route", response_model=MessageResponse)
+async def update_route_endpoint(ride_id: str, route_data: RideRouteUpdate):
+    """Aktualizuje trase przejazdu."""
+    try:
+        await update_ride_route(route_data)
+        return {
+            "ride_id": ride_id,
+            "message": "Trasa została zaktualizowana pomyślnie.",
+        }
+    except ValueError as e:
+        # Przejazd nieznaleziony
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Błąd aktualizacji trasy: {e}",
+        )
+
+
 @app.patch("/api/rides/{ride_id}/status", response_model=MessageResponse)
 async def update_ride_status_endpoint(ride_id: str, status_update: RideStatusUpdate):
     """Aktualizuje status przejazdu (np. active, completed)."""
@@ -108,4 +138,20 @@ async def remove_driver_availability_endpoint(driver_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Błąd usuwania dostępności: {e}",
+        )
+
+
+@app.post("/api/drivers/available", response_model=MessageResponse)
+async def set_driver_available_endpoint(availability_data: DriverAvailability):
+    """
+    Pozwala nowemu kierowcy zgłosić gotowość do przyjęcia pierwszego zlecenia.
+    Ustawia status na AVAILABLE i zapisuje pozycję do GeoSetu w Redis.
+    """
+    try:
+        message = await set_driver_available(availability_data)
+        return {"message": message}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Błąd ustawiania dostępności kierowcy: {e}",
         )
