@@ -12,6 +12,7 @@ from database import (
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
+    DriverAvailability,
     MessageResponse,
     RideCreate,
     RideLocation,
