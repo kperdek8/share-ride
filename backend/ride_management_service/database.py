@@ -106,7 +106,17 @@ async def update_ride_status(ride_id: str, status_update: RideStatusUpdate) -> s
 
     # Czyszczenie klucza, można ewentualnie dodać zapis historiczny do MongoDB
     if new_status in [RideStatus.COMPLETED, RideStatus.CANCELLED]:
+        # Usunięcie wpisu o trasie w Redis
         await redis_client.delete(redis_key)
+
+        # Aktualizacja statusu kierowcy
+        await redis_client.hset(
+            f"driver_status:{driver_id}",
+            mapping={
+                "status": new_status.value,
+                "last_update": int(current_time.timestamp()),
+            },
+        )
 
     return new_status.value
 
@@ -128,14 +138,14 @@ async def update_ride_location(ride_id: str, location: RideLocation) -> None:
     )
 
 
-async def update_ride_route(data: RideRouteUpdate) -> None:
+async def update_ride_route(ride_id: str, data: RideRouteUpdate) -> None:
     """
     Aktualizuje polyline istniejącego przejazdu w MongoDB.
     """
     current_time = datetime.datetime.now(datetime.timezone.utc)
 
     result = await db.rides.update_one(
-        {"_id": data.ride_id},
+        {"_id": ride_id},
         {
             "$set": {
                 "polyline": data.polyline,
@@ -161,9 +171,7 @@ async def set_driver_available(availability_data: DriverAvailability) -> None:
     # Używamy GeoSet 'available_drivers' do szybkiego wyszukiwania w promieniu
     await redis_client.geoadd(
         "available_drivers",
-        availability_data.current_lng,
-        availability_data.current_lat,
-        str(driver_id),
+        [availability_data.lng, availability_data.lat, str(driver_id)]
     )
 
     # Utrzymanie stanu w Redisie (Status i czas ostatniej aktywności)
@@ -172,8 +180,8 @@ async def set_driver_available(availability_data: DriverAvailability) -> None:
         redis_key,
         mapping={
             "status": RideStatus.AVAILABLE.value,
-            "lat": availability_data.current_lat,
-            "lng": availability_data.current_lng,
+            "lat": availability_data.lat,
+            "lng": availability_data.lng,
             "last_update": int(current_time.timestamp()),
         },
     )

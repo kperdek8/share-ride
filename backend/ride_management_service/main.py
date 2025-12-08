@@ -18,9 +18,11 @@ from models import (
     DriverRidesResponse,
     MessageResponse,
     RideCreate,
+    RideCreateResponse,
     RideLocation,
     RideRouteUpdate,
     RideStatusUpdate,
+
 )
 
 app = FastAPI(
@@ -60,7 +62,7 @@ async def health_check():
 
 
 @app.post(
-    "/api/rides", response_model=MessageResponse, status_code=status.HTTP_201_CREATED
+    "/api/rides", response_model=RideCreateResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_ride_endpoint(ride_data: RideCreate):
     """Tworzy nowy przejazd, inicjując go w MongoDB."""
@@ -79,7 +81,7 @@ async def create_ride_endpoint(ride_data: RideCreate):
 async def update_route_endpoint(ride_id: str, route_data: RideRouteUpdate):
     """Aktualizuje trase przejazdu."""
     try:
-        await update_ride_route(route_data)
+        await update_ride_route(ride_id, route_data)
         return {
             "ride_id": ride_id,
             "message": "Trasa została zaktualizowana pomyślnie.",
@@ -99,7 +101,7 @@ async def update_route_endpoint(ride_id: str, route_data: RideRouteUpdate):
 
 @app.patch("/api/rides/{ride_id}/status", response_model=MessageResponse)
 async def update_ride_status_endpoint(ride_id: str, status_update: RideStatusUpdate):
-    """Aktualizuje status przejazdu (np. active, completed)."""
+    """Aktualizuje status przejazdu (np. active, completed, cancelled)."""
     try:
         new_status = await update_ride_status(ride_id, status_update)
         return {
@@ -131,7 +133,7 @@ async def update_ride_location_endpoint(ride_id: str, location: RideLocation):
 
 
 @app.delete("/api/drivers/{driver_id}/available", response_model=MessageResponse)
-async def remove_driver_availability_endpoint(driver_id: int):
+async def remove_driver_availability_endpoint(driver_id: str):
     """
     Usuwa kierowcę z puli dostępności (wylogowanie, koniec pracy).
     """
@@ -152,8 +154,8 @@ async def set_driver_available_endpoint(availability_data: DriverAvailability):
     Ustawia status na AVAILABLE i zapisuje pozycję do GeoSetu w Redis.
     """
     try:
-        message = await set_driver_available(availability_data)
-        return {"message": message}
+        await set_driver_available(availability_data)
+        return {"message": f"Kierowca {availability_data.driver_id} ustawiony jako dostepny."}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
