@@ -14,14 +14,16 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
       - MONGODB_URL=mongodb://mongodb:27017/shareride
+      - REDIS_HOST=redis
     depends_on:
       - postgres
       - mongodb
+      - redis
     networks:
       - shareride-network
 
   # Backend - Test FastAPI
-  backend_matching_service:
+  matching_service:
     build:
       context: ./backend/matching_service
       dockerfile: Dockerfile
@@ -33,9 +35,31 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
       - MONGODB_URL=mongodb://mongodb:27017/shareride
+      - REDIS_HOST=redis
     depends_on:
       - postgres
       - mongodb
+      - redis
+    networks:
+      - shareride-network
+      
+  ride_management_service:
+    build:
+      context: ./backend/ride_management_service
+      dockerfile: Dockerfile
+    container_name: shareride-backend-ride-management-service
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./backend/ride_management_service:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
+      - MONGODB_URL=mongodb://mongodb:27017/shareride
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
     networks:
       - shareride-network
 
@@ -66,10 +90,21 @@ services:
       - mongodb_data:/data/db
     networks:
       - shareride-network
+  # Redis
+  redis:
+    image: redis:latest
+    container_name: shareride-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - shareride-network
 
 volumes:
   postgres_data:
   mongodb_data:
+  redis_data:
 
 networks:
   shareride-network:
