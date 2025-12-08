@@ -16,13 +16,13 @@ class RideStatus(str, Enum):
 
 class RideItem(BaseModel):
     ride_id: str = Field(..., alias="_id")
-    driver_id: int
-    start_lat: float
-    start_lng: float
-    end_lat: float
-    end_lng: float
-    polyline: str
-    current_status: str
+    driver_id: str = Field(..., description="ID kierowcy.")
+    start_lat: float = Field(..., ge=-90, le=90)
+    start_lng: float = Field(..., ge=-180, le=180)
+    end_lat: float = Field(..., ge=-90, le=90)
+    end_lng: float = Field(..., ge=-180, le=180)
+    polyline: str = Field(..., description="Zakodowany Polyline trasy.")
+    current_status: RideStatus = Field(..., description="Aktualny status trasy.")
 
 
 # --- MODELE PYDANTIC DLA DANYCH WEJŚCIOWYCH ---
@@ -31,7 +31,7 @@ class RideItem(BaseModel):
 class RideCreate(BaseModel):
     """Model danych wejściowych dla tworzenia nowego przejazdu."""
 
-    driver_id: int = Field(..., description="ID kierowcy.")
+    driver_id: str = Field(..., description="ID kierowcy.")
     start_lat: float = Field(..., ge=-90, le=90)
     start_lng: float = Field(..., ge=-180, le=180)
     end_lat: float = Field(..., ge=-90, le=90)
@@ -56,15 +56,15 @@ class RideStatusUpdate(BaseModel):
     """Model danych wejściowych dla aktualizacji statusu z użyciem."""
 
     new_status: RideStatus = Field(..., description="Nowy, dozwolony status przejazdu.")
-    driver_id: int = Field(..., description="ID kierowcy, który wykonuje aktualizację.")
+    driver_id: str = Field(..., description="ID kierowcy, który wykonuje aktualizację (będzie zamienione na odczyt id z tokenu dostępu).")
 
 
 class DriverAvailability(BaseModel):
     """Model zgłaszania gotowości do przyjęcia pierwszego zlecenia."""
 
-    driver_id: int = Field(..., description="ID kierowcy.")
-    current_lat: float = Field(..., ge=-90, le=90)
-    current_lng: float = Field(..., ge=-180, le=180)
+    driver_id: str = Field(..., description="ID kierowcy.")
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
 
 
 class DriverRidesQuery(BaseModel):
@@ -72,7 +72,7 @@ class DriverRidesQuery(BaseModel):
     Dane wejściowe dla pobierania przejazdów kierowcy.
     """
 
-    driver_id: int = Field(..., description="ID kierowcy")
+    driver_id: str = Field(..., description="ID kierowcy")
     status: Optional[RideStatus] = Field(
         None, description="Opcjonalny filtr statusu przejazdu"
     )
@@ -82,12 +82,18 @@ class DriverRidesQuery(BaseModel):
 
 
 class DriverRidesResponse(BaseModel):
-    driver_id: int
+    driver_id: str
     rides: List[RideItem]
+
+
+class RideCreateResponse(BaseModel):
+    """Standardowa struktura odpowiedzi."""
+
+    message: str
+    ride_id: str
 
 
 class MessageResponse(BaseModel):
     """Standardowa struktura odpowiedzi."""
 
     message: str
-    ride_id: Optional[str] = None
