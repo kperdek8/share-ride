@@ -10,7 +10,7 @@ from database import (
     update_ride_route,
     update_ride_status,
 )
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     DriverAvailability,
@@ -163,23 +163,26 @@ async def set_driver_available_endpoint(availability_data: DriverAvailability):
         )
 
 
-@app.post(
+@app.get(
     "/api/drivers/rides",
     response_model=DriverRidesResponse,
     status_code=status.HTTP_200_OK,
 )
-async def get_driver_rides_endpoint(data: DriverRidesQuery):
+async def get_driver_rides_endpoint(
+    query: DriverRidesQuery = Depends(),
+):
     """
     Pobiera przejazdy dla wskazanego kierowcy, z opcjonalnym filtrowaniem po statusie.
     """
 
     try:
         rides = await get_driver_rides(
-            driver_id=data.driver_id, status=data.status.value if data.status else None
+            driver_id=query.driver_id,
+            status=query.status.value if query.status else None,
         )
 
         return {
-            "driver_id": data.driver_id,
+            "driver_id": query.driver_id,
             "rides": rides,
         }
 

@@ -53,6 +53,16 @@ curl -X PATCH "http://localhost:8002/api/rides/8308418b-d2d3-404b-9717-f9dfae65a
      }'
 ```
 
+Podgląd przejazdów kierowcy
+```
+curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=abcd1234"
+```
+
+Podgląd przejazdów kierowcy w filtrem (active, pending, completed, cancelled)
+```
+curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=abcd1234&status=pending"
+```
+
 Wylaczenie dostepnosci
 ```
 curl -X DELETE "http://localhost:8002/api/drivers/abcd1234/available"
