@@ -8,11 +8,8 @@ class RideStatus(str, Enum):
     """Dozwolone statusy przejazdu."""
 
     PENDING = "pending"  # Utworzony, czeka na aktywację przez kierowcę
-    AVAILABLE = (
-        "available"  # Kierowca jest gotowy do przyjęcia pierwszego zlecenia (NOWY STAN)
-    )
+    AVAILABLE = "available"  # Kierowca jest gotowy do przyjęcia pierwszego zlecenia
     ACTIVE = "active"  # W trakcie jazdy z pasażerem/pasażerami
-    ON_ROUTE = "on_route"  # W drodze do konkretnego celu (klient/przystanek)
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -28,6 +25,12 @@ class RideCreate(BaseModel):
     start_lng: float = Field(..., ge=-180, le=180)
     end_lat: float = Field(..., ge=-90, le=90)
     end_lng: float = Field(..., ge=-180, le=180)
+    polyline: str = Field(..., description="Zakodowany Polyline trasy.")
+
+
+class RideRouteUpdate(BaseModel):
+    """Model danych wejściowych dla aktualizacji przejazdu."""
+
     polyline: str = Field(..., description="Zakodowany Polyline trasy.")
 
 

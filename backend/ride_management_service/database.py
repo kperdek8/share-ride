@@ -8,6 +8,7 @@ from models import (
     DriverAvailability,
     RideCreate,
     RideLocation,
+    RideRouteUpdate,
     RideStatus,
     RideStatusUpdate,
 )
@@ -90,7 +91,7 @@ async def update_ride_status(ride_id: str, status_update: RideStatusUpdate) -> s
         },
     )
 
-    if new_status in [RideStatus.ACTIVE, RideStatus.ON_ROUTE]:
+    if new_status == RideStatus.ACTIVE:
         # Usunięcie kierowcy z GeoSetu 'available_drivers'
         await redis_client.zrem("available_drivers", str(driver_id))
 
@@ -125,6 +126,26 @@ async def update_ride_location(ride_id: str, location: RideLocation) -> None:
             "last_update": int(current_time.timestamp()),
         },
     )
+
+
+async def update_ride_route(data: RideRouteUpdate) -> None:
+    """
+    Aktualizuje polyline istniejącego przejazdu w MongoDB.
+    """
+    current_time = datetime.datetime.now(datetime.timezone.utc)
+
+    result = await db.rides.update_one(
+        {"_id": data.ride_id},
+        {
+            "$set": {
+                "polyline": data.polyline,
+                "updated_at": current_time,
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise ValueError("Przejazd nie znaleziony.")
 
 
 async def set_driver_available(availability_data: DriverAvailability) -> None:
