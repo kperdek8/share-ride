@@ -201,7 +201,7 @@ async def remove_driver_availability(driver_id: int) -> None:
     await redis_client.delete(f"driver_status:{driver_id}")
 
 
-async def get_driver_rides(driver_id: int, status: str | None = None):
+async def get_driver_rides(driver_id: str, status: str | None = None):
     query: dict = {"driver_id": driver_id}
 
     if status:
