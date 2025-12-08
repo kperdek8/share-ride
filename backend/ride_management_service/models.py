@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,17 @@ class RideStatus(str, Enum):
     ACTIVE = "active"  # W trakcie jazdy z pasażerem/pasażerami
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class RideItem(BaseModel):
+    ride_id: str = Field(..., alias="_id")
+    driver_id: int
+    start_lat: float
+    start_lng: float
+    end_lat: float
+    end_lng: float
+    polyline: str
+    current_status: str
 
 
 # --- MODELE PYDANTIC DLA DANYCH WEJŚCIOWYCH ---
@@ -56,7 +67,23 @@ class DriverAvailability(BaseModel):
     current_lng: float = Field(..., ge=-180, le=180)
 
 
+class DriverRidesQuery(BaseModel):
+    """
+    Dane wejściowe dla pobierania przejazdów kierowcy.
+    """
+
+    driver_id: int = Field(..., description="ID kierowcy")
+    status: Optional[RideStatus] = Field(
+        None, description="Opcjonalny filtr statusu przejazdu"
+    )
+
+
 # --- MODEL DANYCH WYJŚCIOWYCH ---
+
+
+class DriverRidesResponse(BaseModel):
+    driver_id: int
+    rides: List[RideItem]
 
 
 class MessageResponse(BaseModel):

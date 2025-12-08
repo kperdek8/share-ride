@@ -1,6 +1,7 @@
 from database import (
     check_database_health,
     create_new_ride,
+    get_driver_rides,
     mongo_client,  # Potrzebne do zamknięcia połączenia
     redis_client,  # Potrzebne do zamknięcia połączenia
     remove_driver_availability,
@@ -13,6 +14,8 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from models import (
     DriverAvailability,
+    DriverRidesQuery,
+    DriverRidesResponse,
     MessageResponse,
     RideCreate,
     RideLocation,
@@ -155,4 +158,31 @@ async def set_driver_available_endpoint(availability_data: DriverAvailability):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Błąd ustawiania dostępności kierowcy: {e}",
+        )
+
+
+@app.post(
+    "/api/drivers/rides",
+    response_model=DriverRidesResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_driver_rides_endpoint(data: DriverRidesQuery):
+    """
+    Pobiera przejazdy dla wskazanego kierowcy, z opcjonalnym filtrowaniem po statusie.
+    """
+
+    try:
+        rides = await get_driver_rides(
+            driver_id=data.driver_id, status=data.status.value if data.status else None
+        )
+
+        return {
+            "driver_id": data.driver_id,
+            "rides": rides,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Błąd pobierania przejazdów: {str(e)}",
         )

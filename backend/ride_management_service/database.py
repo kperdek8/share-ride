@@ -191,3 +191,15 @@ async def remove_driver_availability(driver_id: int) -> None:
 
     # Usunięcie klucza statusu/sesji dostępności
     await redis_client.delete(f"driver_status:{driver_id}")
+
+
+async def get_driver_rides(driver_id: int, status: str | None = None):
+    query: dict = {"driver_id": driver_id}
+
+    if status:
+        query.update({"current_status": status})
+
+    cursor = db.rides.find(query)
+    rides = await cursor.to_list(length=None)
+
+    return rides
