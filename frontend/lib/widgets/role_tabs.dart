@@ -35,6 +35,13 @@ class RoleTabs extends StatelessWidget {
               icon: Icons.directions_car,
             ),
           ),
+          Expanded(
+            child: _buildTab(
+              role: UserRole.simulation,
+              label: 'Symulacja (DEV)',
+              icon: Icons.science,
+            ),
+          ),
         ],
       ),
     );
@@ -51,6 +58,7 @@ class RoleTabs extends StatelessWidget {
       onTap: () => onRoleChanged(role),
       child: Container(
         margin: const EdgeInsets.all(3.5),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
@@ -66,20 +74,25 @@ class RoleTabs extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               size: 16,
               color: const Color(0xFF0A0A0A),
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF0A0A0A),
-                letterSpacing: -0.15,
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF0A0A0A),
+                  letterSpacing: -0.15,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],

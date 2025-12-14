@@ -110,5 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
 enum UserRole {
   passenger,
   driver,
+  simulation,
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../screens/login_screen.dart';
 import '../screens/passenger_home_screen.dart';
 import '../screens/driver_home_screen.dart';
+import '../screens/simulation_screen.dart';
 import '../screens/register_screen.dart';
 
 class LoginCard extends StatefulWidget {
@@ -31,6 +32,30 @@ class _LoginCardState extends State<LoginCard> {
   @override
   Widget build(BuildContext context) {
     final isPassenger = widget.role == UserRole.passenger;
+    final isSimulation = widget.role == UserRole.simulation;
+    
+    // Dla symulacji pokazujemy tylko przycisk do przejścia
+    if (isSimulation) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.black.withOpacity(0.1),
+            width: 0.71,
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildCardHeader(isPassenger, isSimulation: true),
+            const SizedBox(height: 24),
+            _buildSimulationButton(),
+          ],
+        ),
+      );
+    }
     
     return Container(
       decoration: BoxDecoration(
@@ -55,12 +80,16 @@ class _LoginCardState extends State<LoginCard> {
     );
   }
 
-  Widget _buildCardHeader(bool isPassenger) {
+  Widget _buildCardHeader(bool isPassenger, {bool isSimulation = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          isPassenger ? 'Zaloguj się jako pasażer' : 'Zaloguj się jako kierowca',
+          isSimulation
+              ? 'Tryb symulacji (DEV)'
+              : isPassenger
+                  ? 'Zaloguj się jako pasażer'
+                  : 'Zaloguj się jako kierowca',
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -70,9 +99,11 @@ class _LoginCardState extends State<LoginCard> {
         ),
         const SizedBox(height: 4),
         Text(
-          isPassenger
-              ? 'Znajdź przejazd i zaoszczędź na podróży'
-              : 'Zarabiaj przewożąc pasażerów',
+          isSimulation
+              ? 'Symuluj przejazdy i testuj funkcjonalności'
+              : isPassenger
+                  ? 'Znajdź przejazd i zaoszczędź na podróży'
+                  : 'Zarabiaj przewożąc pasażerów',
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.normal,
@@ -218,6 +249,12 @@ class _LoginCardState extends State<LoginCard> {
                 builder: (context) => const DriverHomeScreen(),
               ),
             );
+          } else if (widget.role == UserRole.simulation) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => const SimulationScreen(),
+              ),
+            );
           }
         },
         style: ElevatedButton.styleFrom(
@@ -229,6 +266,38 @@ class _LoginCardState extends State<LoginCard> {
         ),
         child: const Text(
           'Zaloguj się',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
+            letterSpacing: -0.15,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSimulationButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 36,
+      child: ElevatedButton(
+        onPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const SimulationScreen(),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF155DFC),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: 0,
+        ),
+        child: const Text(
+          'Przejdź do symulacji',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
