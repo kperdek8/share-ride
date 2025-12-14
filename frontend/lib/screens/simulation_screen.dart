@@ -106,7 +106,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Ten ekran służy do symulacji przejazdów. Żądania do backendu będą wysyłane w przyszłości.',
+                  'Ten ekran służy do symulacji przejazdów.',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.normal,

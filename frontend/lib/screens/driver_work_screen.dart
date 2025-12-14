@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../widgets/driver_bottom_navigation_bar.dart';
+import '../services/ride_management_service.dart';
 import 'driver_home_screen.dart';
 import 'driver_active_ride_screen.dart';
 
@@ -14,8 +15,12 @@ class DriverWorkScreen extends StatefulWidget {
 class _DriverWorkScreenState extends State<DriverWorkScreen> {
   bool _isOnline = true;
   bool _sharedRidesEnabled = true;
+  bool _isLoading = false;
   int _timerSeconds = 12;
   Timer? _timer;
+  
+  // TODO: Pobierz driver_id z systemu autentykacji
+  final String _driverId = 'abcd1234';
 
   @override
   void initState() {
@@ -126,14 +131,10 @@ class _DriverWorkScreenState extends State<DriverWorkScreen> {
                     const SizedBox(width: 12),
                     Switch(
                       value: _isOnline,
-                      onChanged: (value) {
+                      onChanged: _isLoading ? null : (value) async {
                         if (!value) {
-                          // Przełączenie na offline - przejście do ekranu początkowego
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => const DriverHomeScreen(),
-                            ),
-                          );
+                          // Przełączenie na offline - usuń dostępność i przejdź do ekranu początkowego
+                          await _goOffline();
                         }
                       },
                       activeColor: Colors.white,
@@ -678,6 +679,52 @@ class _DriverWorkScreenState extends State<DriverWorkScreen> {
         ],
       ),
     );
+  }
+
+  /// Przechodzi na tryb offline - usuwa dostępność kierowcy
+  Future<void> _goOffline() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Usuń kierowcę z puli dostępnych
+      bool success = await RideManagementService.removeDriverAvailability(_driverId);
+
+      if (success) {
+        // Przejście do ekranu początkowego
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const DriverHomeScreen(),
+            ),
+          );
+        }
+      } else {
+        _showErrorSnackBar('Nie udało się przejść na tryb offline. Spróbuj ponownie.');
+        setState(() {
+          _isLoading = false;
+          _isOnline = true; // Przywróć poprzedni stan
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Błąd podczas przechodzenia na tryb offline: $e');
+      setState(() {
+        _isLoading = false;
+        _isOnline = true; // Przywróć poprzedni stan
+      });
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 

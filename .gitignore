@@ -35,6 +35,7 @@ env/
 build/
 ios/
 web/
+macos/
 *.iml
 .idea/
 .vscode/
