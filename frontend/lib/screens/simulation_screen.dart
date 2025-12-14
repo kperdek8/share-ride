@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../services/simulation_service.dart';
 import 'login_screen.dart';
+import 'simulation_map_screen.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -16,8 +18,27 @@ class _SimulationScreenState extends State<SimulationScreen> {
   bool _isLoading = false;
   bool _isLoadingLocation = false;
 
+  late final VoidCallback _fromListener;
+  late final VoidCallback _toListener;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dodaj listenery do kontrolerów, aby przycisk się aktualizował
+    _fromListener = () {
+      setState(() {});
+    };
+    _toListener = () {
+      setState(() {});
+    };
+    _fromController.addListener(_fromListener);
+    _toController.addListener(_toListener);
+  }
+
   @override
   void dispose() {
+    _fromController.removeListener(_fromListener);
+    _toController.removeListener(_toListener);
     _fromController.dispose();
     _toController.dispose();
     super.dispose();
@@ -293,30 +314,62 @@ class _SimulationScreenState extends State<SimulationScreen> {
   }
 
   Future<void> _simulateRide() async {
+    final fromAddress = _fromController.text.trim();
+    final toAddress = _toController.text.trim();
+
+    if (fromAddress.isEmpty || toAddress.isEmpty) {
+      _showErrorSnackBar('Wypełnij oba pola adresów.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
-    // Symulacja opóźnienia
-    await Future.delayed(const Duration(seconds: 1));
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    // TODO: W przyszłości tutaj będzie wysyłane żądanie do backendu
-    // Na razie tylko pokazujemy komunikat
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Symulacja: ${_fromController.text.trim()} → ${_toController.text.trim()}\n'
-            'Żądanie do backendu będzie wysyłane w przyszłości.',
-          ),
-          backgroundColor: const Color(0xFF155DFC),
-          duration: const Duration(seconds: 3),
-        ),
+    try {
+      // Wysyłamy żądanie do backendu
+      final response = await SimulationService.simulateRoute(
+        fromAddress: fromAddress,
+        toAddress: toAddress,
       );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (response != null && response.isNotEmpty) {
+        // Przechodzimy do ekranu z mapą
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SimulationMapScreen(
+              simulationData: response,
+              fromAddress: fromAddress,
+              toAddress: toAddress,
+            ),
+          ),
+        );
+      } else {
+        _showErrorSnackBar('Nie udało się pobrać danych symulacji. Sprawdź czy backend działa i spróbuj ponownie.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      String errorMessage = 'Błąd podczas symulacji: ';
+      if (e.toString().contains('Timeout')) {
+        errorMessage = 'Żądanie trwało zbyt długo. Sprawdź połączenie z internetem i spróbuj ponownie.';
+      } else if (e.toString().contains('Failed host lookup') || e.toString().contains('Connection refused')) {
+        errorMessage = 'Nie można połączyć się z backendem. Upewnij się, że serwer działa na porcie 8000.';
+      } else {
+        errorMessage += e.toString();
+      }
+      
+      _showErrorSnackBar(errorMessage);
     }
   }
 
