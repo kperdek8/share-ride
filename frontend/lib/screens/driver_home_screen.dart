@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../widgets/driver_bottom_navigation_bar.dart';
+import '../services/ride_management_service.dart';
 import 'driver_work_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
@@ -11,6 +13,10 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool _isOnline = false;
+  bool _isLoading = false;
+  
+  // TODO: Pobierz driver_id z systemu autentykacji
+  final String _driverId = 'abcd1234';
 
   @override
   Widget build(BuildContext context) {
@@ -88,14 +94,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 const SizedBox(width: 12),
                 Switch(
                   value: _isOnline,
-                  onChanged: (value) {
+                  onChanged: _isLoading ? null : (value) async {
                     if (value) {
-                      // Przełączenie na online - przejście do ekranu startu pracy
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => const DriverWorkScreen(),
-                        ),
-                      );
+                      // Przełączenie na online - pobierz lokalizację i ustaw dostępność
+                      await _goOnline();
                     } else {
                       setState(() {
                         _isOnline = value;
@@ -173,13 +175,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             width: 125,
             height: 36,
             child: ElevatedButton(
-              onPressed: () {
-                // Nawigacja do ekranu startu pracy
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const DriverWorkScreen(),
-                  ),
-                );
+              onPressed: _isLoading ? null : () async {
+                await _goOnline();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00A63E),
@@ -188,20 +185,112 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 ),
                 elevation: 0,
               ),
-              child: const Text(
-                'Przejdź online',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                  letterSpacing: -0.15,
-                ),
-              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Przejdź online',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                        letterSpacing: -0.15,
+                      ),
+                    ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Przechodzi na tryb online - pobiera lokalizację i ustawia dostępność
+  Future<void> _goOnline() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Sprawdź uprawnienia do lokalizacji
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showErrorSnackBar('Usługa lokalizacji jest wyłączona. Włącz ją w ustawieniach.');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showErrorSnackBar('Brak uprawnień do lokalizacji.');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showErrorSnackBar('Uprawnienia do lokalizacji są trwale zablokowane. Włącz je w ustawieniach.');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Pobierz aktualną lokalizację
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Ustaw kierowcę jako dostępnego
+      bool success = await RideManagementService.setDriverAvailable(
+        driverId: _driverId,
+        lat: position.latitude,
+        lng: position.longitude,
+      );
+
+      if (success) {
+        // Przejście do ekranu startu pracy
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const DriverWorkScreen(),
+            ),
+          );
+        }
+      } else {
+        _showErrorSnackBar('Nie udało się przejść na tryb online. Spróbuj ponownie.');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Błąd podczas przechodzenia na tryb online: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 

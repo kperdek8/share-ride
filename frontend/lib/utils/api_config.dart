@@ -28,5 +28,16 @@ class ApiConfig {
   
   /// Zwraca pełny URL do endpointu rides/short-term
   static String get ridesShortTermUrl => '$baseUrl/rides/short-term';
+  
+  /// Zwraca bazowy URL dla Ride Management Service (port 8002)
+  static String get rideManagementBaseUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:8002';
+    } else if (Platform.isIOS) {
+      return 'http://localhost:8002';
+    } else {
+      return 'http://localhost:8002';
+    }
+  }
 }
 
