@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'login_screen.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -11,6 +14,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
   final TextEditingController _fromController = TextEditingController();
   final TextEditingController _toController = TextEditingController();
   bool _isLoading = false;
+  bool _isLoadingLocation = false;
 
   @override
   void dispose() {
@@ -49,7 +53,13 @@ class _SimulationScreenState extends State<SimulationScreen> {
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Color(0xFF0A0A0A)),
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const LoginScreen(),
+            ),
+          );
+        },
       ),
       title: const Text(
         'Symulacja (DEV)',
@@ -144,6 +154,9 @@ class _SimulationScreenState extends State<SimulationScreen> {
             hint: 'Wprowadź adres początkowy',
             icon: Icons.location_on,
             iconColor: Colors.green,
+            showLocationButton: true,
+            onLocationButtonPressed: _getCurrentLocation,
+            isLoadingLocation: _isLoadingLocation,
           ),
           const SizedBox(height: 16),
           // Pole "Dokąd"
@@ -165,6 +178,9 @@ class _SimulationScreenState extends State<SimulationScreen> {
     required String hint,
     required IconData icon,
     required Color iconColor,
+    bool showLocationButton = false,
+    VoidCallback? onLocationButtonPressed,
+    bool isLoadingLocation = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,6 +215,28 @@ class _SimulationScreenState extends State<SimulationScreen> {
                 letterSpacing: -0.31,
               ),
               prefixIcon: Icon(icon, color: iconColor, size: 20),
+              suffixIcon: showLocationButton
+                  ? IconButton(
+                      icon: isLoadingLocation
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF155DFC),
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.my_location,
+                              color: Color(0xFF155DFC),
+                              size: 20,
+                            ),
+                      onPressed: isLoadingLocation ? null : onLocationButtonPressed,
+                      tooltip: 'Użyj aktualnej lokalizacji',
+                    )
+                  : null,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 12,
@@ -277,6 +315,112 @@ class _SimulationScreenState extends State<SimulationScreen> {
           ),
           backgroundColor: const Color(0xFF155DFC),
           duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Pobiera aktualną lokalizację urządzenia i wypełnia pole "Skąd"
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+
+    try {
+      // Sprawdź uprawnienia
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showErrorSnackBar('Usługa lokalizacji jest wyłączona. Włącz ją w ustawieniach.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showErrorSnackBar('Brak uprawnień do lokalizacji.');
+          setState(() {
+            _isLoadingLocation = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showErrorSnackBar('Uprawnienia do lokalizacji są trwale zablokowane. Włącz je w ustawieniach.');
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Pobierz aktualną lokalizację
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Konwertuj współrzędne na adres (reverse geocoding)
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks.first;
+          // Formatuj adres
+          String address = _formatAddress(place);
+          _fromController.text = address;
+        } else {
+          // Jeśli nie udało się pobrać adresu, użyj współrzędnych
+          _fromController.text =
+              '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+        }
+      } catch (e) {
+        // Jeśli reverse geocoding się nie powiódł, użyj współrzędnych
+        _fromController.text =
+            '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+      }
+    } catch (e) {
+      _showErrorSnackBar('Błąd podczas pobierania lokalizacji: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+        });
+      }
+    }
+  }
+
+  /// Formatuje adres z Placemark na czytelny string
+  String _formatAddress(Placemark place) {
+    List<String> addressParts = [];
+
+    if (place.street != null && place.street!.isNotEmpty) {
+      addressParts.add(place.street!);
+    }
+    if (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty) {
+      addressParts.insert(0, place.subThoroughfare!);
+    }
+    if (place.locality != null && place.locality!.isNotEmpty) {
+      addressParts.add(place.locality!);
+    }
+    if (place.postalCode != null && place.postalCode!.isNotEmpty) {
+      addressParts.add(place.postalCode!);
+    }
+
+    return addressParts.join(', ');
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
         ),
       );
     }
