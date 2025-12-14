@@ -38,7 +38,7 @@ class RoleTabs extends StatelessWidget {
           Expanded(
             child: _buildTab(
               role: UserRole.simulation,
-              label: 'Symulacja (DEV)',
+              label: 'Symulacja',
               icon: Icons.science,
             ),
           ),
