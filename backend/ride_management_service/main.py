@@ -48,7 +48,7 @@ async def shutdown_event():
 
 @app.get("/", response_model=MessageResponse)
 async def root():
-    return {"message": "ShareRide Matching Service", "status": "running"}
+    return {"message": "ShareRide Ride Management Service", "status": "running"}
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
