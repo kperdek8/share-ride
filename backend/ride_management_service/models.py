@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import List, Optional
-
-from pydantic import BaseModel, Field
+from datetime import datetime, UTC
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class RideStatus(str, Enum):
@@ -14,35 +14,45 @@ class RideStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class Location(BaseModel):
+    lat: float
+    lng: float
+
+
+class PassengerItem(BaseModel):
+    passenger_id: str
+    pickup: Location
+    dropoff: Location
+
+
+class RouteData(BaseModel):
+    polyline: str
+    distance_km: float
+    duration_min: int
+
+
 class RideItem(BaseModel):
-    ride_id: str = Field(..., alias="_id")
-    driver_id: str = Field(..., description="ID kierowcy.")
-    start_lat: float = Field(..., ge=-90, le=90)
-    start_lng: float = Field(..., ge=-180, le=180)
-    end_lat: float = Field(..., ge=-90, le=90)
-    end_lng: float = Field(..., ge=-180, le=180)
-    polyline: str = Field(..., description="Zakodowany Polyline trasy.")
-    current_status: RideStatus = Field(..., description="Aktualny status trasy.")
+    """
+    Model reprezentujący pełny dokument przejazdu w MongoDB.
+    """
+    id: str = Field(alias="_id") # Mapowanie MongoDB _id na pole id w Pydantic
+    driver_id: str
+    status: RideStatus
+    passengers: List[PassengerItem]
+    route_data: RouteData
 
 
 # --- MODELE PYDANTIC DLA DANYCH WEJŚCIOWYCH ---
 
 
-class RideCreate(BaseModel):
-    """Model danych wejściowych dla tworzenia nowego przejazdu."""
-
-    driver_id: str = Field(..., description="ID kierowcy.")
-    start_lat: float = Field(..., ge=-90, le=90)
-    start_lng: float = Field(..., ge=-180, le=180)
-    end_lat: float = Field(..., ge=-90, le=90)
-    end_lng: float = Field(..., ge=-180, le=180)
-    polyline: str = Field(..., description="Zakodowany Polyline trasy.")
-
-
-class RideRouteUpdate(BaseModel):
-    """Model danych wejściowych dla aktualizacji przejazdu."""
-
-    polyline: str = Field(..., description="Zakodowany Polyline trasy.")
+class RideJoinRequest(BaseModel):
+    """Żądanie dołączenia do przejazdu lub zaakceptowania oferty kierowcy."""
+    driver_id: str = Field(..., description="ID wybranego kierowcy.")
+    passenger_id: str = Field(..., description="ID pasażera.")
+    pickup_lat: float
+    pickup_lng: float
+    dropoff_lat: float
+    dropoff_lng: float
 
 
 class RideLocation(BaseModel):
@@ -86,11 +96,11 @@ class DriverRidesResponse(BaseModel):
     rides: List[RideItem]
 
 
-class RideCreateResponse(BaseModel):
+class RideJoinResponse(BaseModel):
     """Standardowa struktura odpowiedzi."""
-
-    message: str
     ride_id: str
+    driver_id: str
+    status: RideStatus
 
 
 class MessageResponse(BaseModel):

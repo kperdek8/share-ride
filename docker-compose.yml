@@ -34,6 +34,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
       - MONGODB_URL=mongodb://mongodb:27017/shareride
       - REDIS_HOST=redis
+      - GOOGLE_MAPS_API_KEY=PRZYKLADOWY_KLUCZ
     depends_on:
       - postgres
       - mongodb
@@ -54,6 +55,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/shareride
       - MONGODB_URL=mongodb://mongodb:27017/shareride
       - REDIS_HOST=redis
+      - GOOGLE_MAPS_API_KEY=PRZYKLADOWY_KLUCZ
     depends_on:
       - postgres
       - mongodb
