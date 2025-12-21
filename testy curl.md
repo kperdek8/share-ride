@@ -7,29 +7,16 @@ curl -X POST "http://localhost:8002/api/drivers/available" \
      -d '{
 		"lat": 51.1079,
 		"lng": 17.0385,
-		"driver_id": "abcd1234"
+		"driver_id": "driver1"
      }'
 ```
 
-Tworzenie przejazdu
-```
-curl -X POST "http://localhost:8002/api/rides" \
-     -H "Content-Type: application/json" \
-     -d '{
-         "driver_id": "abcd1234",
-         "start_lat": 51.1079,
-         "start_lng": 17.0385,
-         "end_lat": 51.0900,
-         "end_lng": 17.0600,
-         "polyline": "encoded_polyline_string_goes_here"
-     }'
-```
 Aktualizacja statusu (zamień ID przejazdu)
 ```
 curl -X PATCH "http://localhost:8002/api/rides/8308418b-d2d3-404b-9717-f9dfae65abb1/status" \
      -H "Content-Type: application/json" \
      -d '{
-		"driver_id": "abcd1234",
+		"driver_id": "driver1",
 		"new_status": "active"
      }'
 ```
@@ -44,26 +31,45 @@ curl -X PATCH "http://localhost:8002/api/rides/98f4b377-7010-420e-b3f3-fbe08122d
      }'
 ```
 
-Aktualizacja trasy (zamień ID przejazdu) + polyline jako placeholder 
-```
-curl -X PATCH "http://localhost:8002/api/rides/8308418b-d2d3-404b-9717-f9dfae65abb1/route" \
-     -H "Content-Type: application/json" \
-     -d '{
-         "polyline": "some_new_encoded_polyline"
-     }'
-```
-
 Podgląd przejazdów kierowcy
 ```
-curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=abcd1234"
+curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=driver1"
 ```
 
 Podgląd przejazdów kierowcy w filtrem (active, pending, completed, cancelled)
 ```
-curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=abcd1234&status=pending"
+curl -X GET "http://localhost:8002/api/drivers/rides?driver_id=driver1&status=pending"
 ```
 
 Wylaczenie dostepnosci
 ```
-curl -X DELETE "http://localhost:8002/api/drivers/abcd1234/available"
+curl -X DELETE "http://localhost:8002/api/drivers/driver1/available"
+```
+
+Wyszukanie przejazdu
+```
+curl -X 'POST' \
+  'http://localhost:8001/api/matching/offers' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "pickup_lat": 51.077582,
+  "pickup_lng": 17.019205,
+  "dropoff_lat": 51.075150,
+  "dropoff_lng": 17.032672
+}'
+```
+
+Dołączenie do przejazdu
+```
+curl -X 'POST' \
+  'http://localhost:8002/api/rides/join' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "driver_id": "driver1",
+  "passenger_id": "passenger1",
+  "pickup_lat": 51.077582,
+  "pickup_lng": 17.019205,
+  "dropoff_lat": 51.075150,
+  "dropoff_lng": 17.032672
+}'
 ```

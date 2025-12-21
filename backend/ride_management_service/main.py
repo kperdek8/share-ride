@@ -1,13 +1,12 @@
 from database import (
     check_database_health,
-    create_new_ride,
+    join_ride,
     get_driver_rides,
     mongo_client,  # Potrzebne do zamknięcia połączenia
     redis_client,  # Potrzebne do zamknięcia połączenia
     remove_driver_availability,
     set_driver_available,
     update_ride_location,
-    update_ride_route,
     update_ride_status,
 )
 from fastapi import FastAPI, HTTPException, status, Depends
@@ -17,10 +16,9 @@ from models import (
     DriverRidesQuery,
     DriverRidesResponse,
     MessageResponse,
-    RideCreate,
-    RideCreateResponse,
+    RideJoinRequest,
+    RideJoinResponse,
     RideLocation,
-    RideRouteUpdate,
     RideStatusUpdate,
 
 )
@@ -61,49 +59,39 @@ async def health_check():
     )
 
 
-@app.post(
-    "/api/rides", response_model=RideCreateResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_ride_endpoint(ride_data: RideCreate):
-    """Tworzy nowy przejazd, inicjując go w MongoDB."""
+@app.post("/api/rides/join", response_model=RideJoinResponse)
+async def join_ride_endpoint(request: RideJoinRequest):
     try:
-        ride_id = await create_new_ride(ride_data)
-        return {"ride_id": ride_id, "message": "Przejazd utworzony pomyślnie."}
-    except Exception as e:
-        # Wewnętrzne błędy serwera/baz danych
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Błąd tworzenia przejazdu: {e}",
+        result = await join_ride(request)
+
+        return RideJoinResponse(
+            ride_id=result["ride_id"],
+            driver_id=result["driver_id"],
+            status=result["status"]
         )
 
-
-@app.patch("/api/rides/{ride_id}/route", response_model=MessageResponse)
-async def update_route_endpoint(ride_id: str, route_data: RideRouteUpdate):
-    """Aktualizuje trase przejazdu."""
-    try:
-        await update_ride_route(ride_id, route_data)
-        return {
-            "ride_id": ride_id,
-            "message": "Trasa została zaktualizowana pomyślnie.",
-        }
     except ValueError as e:
-        # Przejazd nieznaleziony
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
+        # Kierowca niedostępny
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    except NotImplementedError as e:
+        # Shared ride - jeszcze nie ma
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(e))
+
+    except RuntimeError as e:
+        # Błąd Google Maps / Bazy
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Błąd aktualizacji trasy: {e}",
-        )
+        # Wszystko inne
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred.")
 
 
 @app.patch("/api/rides/{ride_id}/status", response_model=MessageResponse)
 async def update_ride_status_endpoint(ride_id: str, status_update: RideStatusUpdate):
     """Aktualizuje status przejazdu (np. active, completed, cancelled)."""
     try:
-        new_status = await update_ride_status(ride_id, status_update)
+        new_status = await update_ride_status(ride_id, status_update.driver_id, status_update.new_status)
         return {
             "ride_id": ride_id,
             "message": f"Status zaktualizowany na: {new_status}",

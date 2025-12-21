@@ -1,10 +1,12 @@
 fastapi
 uvicorn[standard]
 pydantic
-sqlalchemy
-psycopg2-binary
-pymongo
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-pyproj
+motor
+redis
+python-dotenv
+httpx
+
+
