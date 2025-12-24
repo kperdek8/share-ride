@@ -43,7 +43,7 @@ async def get_directions(
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_API_KEY,
-        "X-Goog-Fieldmask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
+        "X-Goog-Fieldmask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs"
     }
 
     async with httpx.AsyncClient() as client:
@@ -54,12 +54,18 @@ async def get_directions(
 
             if "routes" in data and len(data["routes"]) > 0:
                 route = data["routes"][0]
+                legs = route["legs"]
 
                 # Routes API zwraca dystans w metrach, a czas jako string np. "450s"
+
+                # Legs[0] - odcinek kierowca -> pasażer
+                eta_to_pickup_sec = int(legs[0]["duration"].rstrip('s'))
+                # Całość trasy kierowca -> pasażer -> cel
                 duration_seconds = int(route["duration"].rstrip('s'))
                 distance_meters = route["distanceMeters"]
 
                 return {
+                    "pickup_eta_min": round(eta_to_pickup_sec / 60),
                     "duration_min": round(duration_seconds / 60),
                     "distance_km": round(distance_meters / 1000, 2),
                     "polyline": route["polyline"]["encodedPolyline"]

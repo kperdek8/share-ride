@@ -2,9 +2,9 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 
-from models import RideSearchRequest, MatchingOffer, MessageResponse
+from models import RideSearchRequest, MatchingOffer, MessageResponse, RideStatus
 from google_maps import get_directions
-from database import check_database_health, redis_client, get_nearby_drivers_from_redis
+from database import check_database_health, redis_client, get_nearby_drivers_from_redis, get_driver_status
 
 app = FastAPI(
     title="ShareRide Matching Service",
@@ -62,26 +62,35 @@ async def find_ride_offers(request: RideSearchRequest):
 
     offers = []
 
-    # 2. Dla każdego kandydata sprawdzamy realny dojazd przez Google
+    # 2. Dla każdego kandydata sprawdzamy realny dojazd przez Google Routes API
     for driver_data in nearby_drivers:
         driver_id, coords = driver_data
         lng, lat = coords
 
-        # Obliczamy trasę: Obecna pozycja kierowcy -> Punkt odbioru pasażera
-        directions = await get_directions(
-            origin_lat=lat, origin_lng=lng,
-            dest_lat=request.pickup_lat, dest_lng=request.pickup_lng
-        )
+        status, ride_id = await get_driver_status(driver_id)
 
-        if directions:
-            offers.append(MatchingOffer(
-                driver_id=driver_id,
-                eta_minutes=directions["duration_min"],
-                distance_km=directions["distance_km"],
-                polyline=directions["polyline"]
-            ))
+        # Kierowca nie jest dostępny
+        if status not in [RideStatus.AVAILABLE, RideStatus.ACTIVE]:
+            continue
+
+        # Kierowca nie ma aktywnego przejazdu
+        if status == RideStatus.AVAILABLE:
+            directions = await get_directions(
+                origin_lat=lat, origin_lng=lng,
+                dest_lat=request.dropoff_lat, dest_lng=request.dropoff_lng,
+                waypoints=[(request.pickup_lat, request.pickup_lng)]
+            )
+
+            if directions:
+                offers.append(MatchingOffer(
+                    driver_id=driver_id,
+                    pickup_eta_minutes=directions["pickup_eta_min"],
+                    total_eta_minutes=directions["duration_min"],
+                    distance_km=directions["distance_km"],
+                    polyline=directions["polyline"]
+                ))
 
     # 3. Sortujemy od najbliższego (najniższy czas dojazdu)
-    offers.sort(key=lambda x: x.eta_minutes)
+    offers.sort(key=lambda x: x.total_eta_minutes)
 
     return offers[:5]

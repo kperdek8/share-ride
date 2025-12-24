@@ -25,7 +25,6 @@ db = mongo_client.rides_db
 redis_client = redis.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
 
 
-# FUNKCJE LOGIKI BIZNESOWEJ
 async def check_database_health() -> bool:
     """Sprawdza status połączenia z Redis i MongoDB."""
     try:
@@ -36,18 +35,20 @@ async def check_database_health() -> bool:
         return False
 
 
-async def join_ride(data: RideJoinRequest):
-    driver_id_str = str(data.driver_id)
+# FUNKCJE LOGIKI BIZNESOWEJ
 
-    # 1. Próba rezerwacji (Nowy Przejazd)
-    driver_coords = await _reserve_available_driver(driver_id_str)
-    if driver_coords:
+async def join_ride(data: RideJoinRequest):
+    driver_id = data.driver_id
+
+    driver_coords = await _get_driver_coords(driver_id)
+    status, ride_id = await _get_driver_status(driver_id)
+
+    # 1. Kierowca dostępny - nowy przejazd
+    if status == RideStatus.AVAILABLE:
         return await _handle_new_ride_creation(data, driver_coords)
 
-    # 2. Sprawdzenie istniejącego przejazdu (Shared Ride)
-    active_ride_id = await _get_active_ride_id(data.driver_id)
-    if active_ride_id:
-        # Rzucamy standardowy błąd, który endpoint wyłapie
+    # 2. Kierowca w trasie - dosiadka
+    if status == RideStatus.ACTIVE:
         raise NotImplementedError("Shared rides are not supported yet.")
 
     # 3. Brak dostępności
@@ -83,7 +84,7 @@ async def set_driver_available(availability_data: DriverAvailability) -> None:
     # Inicjalizacja/Aktualizacja stanu w Redis GeoSet
     # Używamy GeoSet 'available_drivers' do szybkiego wyszukiwania w promieniu
     await redis_client.geoadd(
-        "available_drivers",
+        "drivers_locations",
         [availability_data.lng, availability_data.lat, str(driver_id)]
     )
 
@@ -107,8 +108,8 @@ async def remove_driver_availability(driver_id: str) -> None:
 
     # TODO: Weryfikacja zakonczenia wszystkich przejazdow
 
-    # Usunięcie z GeoSetu 'available_drivers'
-    await redis_client.zrem("available_drivers", str(driver_id))
+    # Usunięcie z GeoSetu 'drivers_locations'
+    await redis_client.zrem("drivers_locations", str(driver_id))
 
     # Usunięcie klucza statusu/sesji dostępności
     await redis_client.delete(f"driver_status:{driver_id}")
@@ -153,11 +154,7 @@ async def update_ride_status(ride_id: str, driver_id: str, new_status: RideStatu
         },
     )
 
-    # TODO: Rozdzielic ACTIVE (akceptacja przez kierowce) i PENDING (wybranie kierowcy przez pasażera)
     if new_status in [RideStatus.ACTIVE, RideStatus.PENDING]:
-        # Usunięcie kierowcy z GeoSetu 'available_drivers'
-        await redis_client.zrem("available_drivers", driver_id)
-
         # Aktualizacja statusu kierowcy
         await redis_client.hset(
             f"driver_status:{driver_id}",
@@ -201,8 +198,6 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
     )
 
     if not route_data:
-        # Rollback
-        await redis_client.geoadd("available_drivers", [start_coords[0], start_coords[1], data.driver_id])
         raise RuntimeError("Błąd podczas wyznaczania trasy przez Google API.")
 
     # Pełny zapis do MongoDB
@@ -246,21 +241,17 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
     }
 
 
-async def _reserve_available_driver(driver_id_str: str) -> Optional[Tuple[float, float]]:
-    """Próbuje zarezerwować kierowcę. Zwraca współrzędne lub None."""
-    coords = await redis_client.geopos("available_drivers", driver_id_str)
-    removed = await redis_client.zrem("available_drivers", driver_id_str)
+async def _get_driver_coords(driver_id_str: str) -> Optional[Tuple[float, float]]:
+    coords = await redis_client.geopos("drivers_locations", driver_id_str)
 
-    if removed and coords and coords[0]:
+    if coords and coords[0]:
         lng, lat = coords[0]
-        # Mapujemy kolejność Redisa na naszą standardową
+        # Mapujemy kolejność Redisa na standardową
         return lat, lng
     return None
 
 
-async def _get_active_ride_id(driver_id: str) -> Optional[str]:
-    """Sprawdza, czy kierowca ma już aktywny przejazd."""
+async def _get_driver_status(driver_id: str) -> Tuple[RideStatus, Optional[str]]:
+    """Zwraca status kierowcy i id ewentualnego przejazdu."""
     status_data = await redis_client.hgetall(f"driver_status:{driver_id}")
-    if status_data.get("status") in [RideStatus.PENDING.value, RideStatus.ACTIVE.value]:
-        return status_data.get("current_ride")
-    return None
+    return status_data.get("status"), status_data.get("current_ride")
