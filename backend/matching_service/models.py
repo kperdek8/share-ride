@@ -1,5 +1,17 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field
 from typing import List
+
+
+class RideStatus(str, Enum):
+    """Dozwolone statusy przejazdu."""
+
+    PENDING = "pending"  # Utworzony, czeka na aktywację przez kierowcę
+    AVAILABLE = "available"  # Kierowca jest gotowy do przyjęcia pierwszego zlecenia
+    ACTIVE = "active"  # W trakcie jazdy z pasażerem/pasażerami
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class RideSearchRequest(BaseModel):
@@ -13,7 +25,8 @@ class RideSearchRequest(BaseModel):
 class MatchingOffer(BaseModel):
     """Uproszczona oferta dojazdu."""
     driver_id: str
-    eta_minutes: int
+    pickup_eta_minutes: int = Field(..., description="Czas do odbioru pasażera")
+    total_eta_minutes: int = Field(..., description="Czas całej trasy od odbioru do celu.")
     distance_km: float
     polyline: str  # Trasa dojazdu od kierowcy do pasażera
 
