@@ -54,12 +54,20 @@ async def get_directions(
 
             if "routes" in data and len(data["routes"]) > 0:
                 route = data["routes"][0]
-                legs = route["legs"]
+                legs = route.get("legs", [])
 
                 # Routes API zwraca dystans w metrach, a czas jako string np. "450s"
 
-                # Legs[0] - odcinek kierowca -> pasażer
-                eta_to_pickup_sec = int(legs[0]["duration"].rstrip('s'))
+                # Legs[0] - odcinek kierowca -> pasażer (lub pierwszy waypoint)
+                # Jeśli są waypoints, legs[0] to kierowca -> pierwszy waypoint
+                # Jeśli nie ma waypoints, legs[0] to kierowca -> cel
+                if legs and len(legs) > 0:
+                    eta_to_pickup_sec = int(legs[0]["duration"].rstrip('s'))
+                else:
+                    # Fallback - użyj całkowitego czasu jeśli brak legs
+                    duration_seconds = int(route["duration"].rstrip('s'))
+                    eta_to_pickup_sec = duration_seconds // 2  # Przybliżenie - połowa czasu
+                
                 # Całość trasy kierowca -> pasażer -> cel
                 duration_seconds = int(route["duration"].rstrip('s'))
                 distance_meters = route["distanceMeters"]
