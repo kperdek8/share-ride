@@ -48,8 +48,8 @@ async def join_ride(data: RideJoinRequest):
         return await _handle_new_ride_creation(data, driver_coords)
 
     # 2. Kierowca w trasie - dosiadka
-    if status == RideStatus.ACTIVE:
-        raise NotImplementedError("Shared rides are not supported yet.")
+    if status == RideStatus.ACTIVE and ride_id:
+        return await _handle_shared_ride_join(data, ride_id, driver_coords)
 
     # 3. Brak dostępności
     raise ValueError("Driver is not available.")
@@ -254,4 +254,93 @@ async def _get_driver_coords(driver_id_str: str) -> Optional[Tuple[float, float]
 async def _get_driver_status(driver_id: str) -> Tuple[RideStatus, Optional[str]]:
     """Zwraca status kierowcy i id ewentualnego przejazdu."""
     status_data = await redis_client.hgetall(f"driver_status:{driver_id}")
-    return status_data.get("status"), status_data.get("current_ride")
+    status_str = status_data.get("status")
+    if status_str:
+        try:
+            status = RideStatus(status_str)
+        except ValueError:
+            return None, status_data.get("current_ride")
+        return status, status_data.get("current_ride")
+    return None, status_data.get("current_ride")
+
+
+async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_coords: Optional[Tuple[float, float]]):
+    """Dodaje pasażera do istniejącego przejazdu współdzielonego."""
+    current_time = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Pobierz istniejący przejazd
+    existing_ride = await db.rides.find_one({"_id": ride_id})
+    if not existing_ride:
+        raise ValueError("Przejazd nie znaleziony w MongoDB.")
+    
+    # Sprawdź liczbę pasażerów (max 4)
+    current_passengers = existing_ride.get("passengers", [])
+    if len(current_passengers) >= 4:
+        raise ValueError("Przejazd jest już pełny (maksymalnie 4 pasażerów).")
+    
+    # Sprawdź czy pasażer już nie jest w przejeździe
+    for passenger in current_passengers:
+        if passenger.get("passenger_id") == data.passenger_id:
+            raise ValueError("Pasażer już jest w tym przejeździe.")
+    
+    # Pobierz aktualną pozycję kierowcy z Redis lub użyj driver_coords
+    if not driver_coords:
+        ride_redis = await redis_client.hgetall(f"ride:{ride_id}")
+        if ride_redis:
+            driver_coords = (float(ride_redis.get("lat", 0)), float(ride_redis.get("lng", 0)))
+        else:
+            raise ValueError("Nie można określić pozycji kierowcy.")
+    
+    driver_lat, driver_lng = driver_coords
+    
+    # Przygotuj listę wszystkich pasażerów (istniejących + nowy)
+    all_passengers = current_passengers + [{
+        "passenger_id": data.passenger_id,
+        "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
+        "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng}
+    }]
+    
+    # Przygotuj dane dla get_full_trip_route
+    active_passengers = []
+    for p in all_passengers:
+        pickup = p.get("pickup", {})
+        dropoff = p.get("dropoff", {})
+        active_passengers.append({
+            "pickup_lat": pickup.get("lat"),
+            "pickup_lng": pickup.get("lng"),
+            "dropoff_lat": dropoff.get("lat"),
+            "dropoff_lng": dropoff.get("lng"),
+        })
+    
+    # Oblicz nową trasę uwzględniającą wszystkich pasażerów
+    from google_maps import get_full_trip_route
+    new_route_data = await get_full_trip_route(
+        driver_lat=driver_lat,
+        driver_lng=driver_lng,
+        active_passengers=active_passengers
+    )
+    
+    if not new_route_data:
+        raise RuntimeError("Błąd podczas wyznaczania trasy przez Google API.")
+    
+    # Zaktualizuj przejazd w MongoDB - dodaj nowego pasażera i zaktualizuj trasę
+    await db.rides.update_one(
+        {"_id": ride_id},
+        {
+            "$push": {"passengers": {
+                "passenger_id": data.passenger_id,
+                "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
+                "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng}
+            }},
+            "$set": {
+                "route_data": new_route_data,
+                "updated_at": current_time
+            }
+        }
+    )
+    
+    return {
+        "ride_id": ride_id,
+        "driver_id": data.driver_id,
+        "status": existing_ride.get("status", RideStatus.ACTIVE.value)
+    }

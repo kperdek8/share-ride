@@ -90,9 +90,11 @@ async def find_ride_offers(request: RideSearchRequest):
                     continue
 
                 status, ride_id = await get_driver_status(driver_id)
+                print(f"Kierowca {driver_id}: status={status}, ride_id={ride_id}")
 
                 # Kierowca nie jest dostępny lub brak statusu
                 if status is None or status not in [RideStatus.AVAILABLE, RideStatus.ACTIVE]:
+                    print(f"Pominięto kierowcę {driver_id} - status: {status}")
                     continue
 
                 # Kierowca dostępny - nowy przejazd (solo)
@@ -117,21 +119,25 @@ async def find_ride_offers(request: RideSearchRequest):
                 # Kierowca w trasie - przejazd współdzielony
                 elif status == RideStatus.ACTIVE and ride_id:
                     try:
+                        print(f"Przetwarzanie przejazdu współdzielonego: driver={driver_id}, ride_id={ride_id}")
                         passenger_count = await get_ride_passenger_count(ride_id)
+                        print(f"Liczba pasażerów w przejeździe {ride_id}: {passenger_count}")
                         
                         # Sprawdzamy czy kierowca może przyjąć kolejnego pasażera (max 4 pasażerów)
                         if passenger_count < 4:
+                            print(f"Kierowca {driver_id} może przyjąć pasażera (obecnie: {passenger_count}/4)")
                             directions = await get_directions(
                                 origin_lat=lat, origin_lng=lng,
                                 dest_lat=request.dropoff_lat, dest_lng=request.dropoff_lng,
                                 waypoints=[(request.pickup_lat, request.pickup_lng)]
                             )
 
+                            print(f"Directions dla {driver_id}: {directions}")
                             if directions and "pickup_eta_min" in directions:
                                 # Dla przejazdów współdzielonych dodajemy 10% czasu na dodatkowe przystanki
                                 extra_time = max(2, int(directions["duration_min"] * 0.1))
                                 
-                                offers.append(MatchingOffer(
+                                offer = MatchingOffer(
                                     driver_id=driver_id,
                                     pickup_eta_minutes=directions.get("pickup_eta_min", 0),
                                     total_eta_minutes=directions["duration_min"] + extra_time,
@@ -139,9 +145,17 @@ async def find_ride_offers(request: RideSearchRequest):
                                     polyline=directions["polyline"],
                                     is_shared=True,
                                     shared_passengers=passenger_count + 1  # +1 dla nowego pasażera
-                                ))
+                                )
+                                print(f"Dodano ofertę współdzieloną: {offer}")
+                                offers.append(offer)
+                            else:
+                                print(f"Brak directions lub brak pickup_eta_min dla {driver_id}")
+                        else:
+                            print(f"Kierowca {driver_id} ma już maksymalną liczbę pasażerów ({passenger_count})")
                     except Exception as e:
                         print(f"Błąd podczas przetwarzania przejazdu współdzielonego dla {driver_id}: {e}")
+                        import traceback
+                        traceback.print_exc()
                         continue
             except Exception as e:
                 print(f"Błąd podczas przetwarzania kierowcy: {e}")

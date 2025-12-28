@@ -13,14 +13,19 @@ MONGO_URL = os.environ.get("MONGODB_URL")
 # INICJALIZACJA KLIENTÓW
 redis_client = redis.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
 mongo_client = AsyncIOMotorClient(MONGO_URL) if MONGO_URL else None
-db = mongo_client.rides_db if mongo_client else None
+if mongo_client:
+    db = mongo_client.rides_db
+    print(f"MongoDB połączone: {MONGO_URL}, baza: rides_db")
+else:
+    db = None
+    print(f"Brak połączenia z MongoDB - MONGO_URL: {MONGO_URL}")
 
 
 async def check_database_health() -> bool:
     """Sprawdza status połączenia z Redis i MongoDB."""
     try:
         await redis_client.ping()
-        if mongo_client:
+        if mongo_client is not None:
             await mongo_client.admin.command('ping')
         return True
     except Exception:
@@ -29,15 +34,24 @@ async def check_database_health() -> bool:
 
 async def get_ride_passenger_count(ride_id: str) -> int:
     """Zwraca liczbę pasażerów w przejeździe."""
-    if not db:
+    if db is None:
+        print(f"Brak połączenia z MongoDB - nie można pobrać liczby pasażerów dla {ride_id}")
         return 0
     try:
+        print(f"Pobieranie liczby pasażerów dla ride_id: {ride_id}")
         ride = await db.rides.find_one({"_id": ride_id})
-        if ride and "passengers" in ride:
-            return len(ride["passengers"])
-        return 0
+        if ride:
+            passengers = ride.get("passengers", [])
+            count = len(passengers)
+            print(f"Znaleziono przejazd {ride_id} z {count} pasażerami")
+            return count
+        else:
+            print(f"Przejazd {ride_id} nie znaleziony w MongoDB")
+            return 0
     except Exception as e:
-        print(f"Błąd pobierania liczby pasażerów: {e}")
+        print(f"Błąd pobierania liczby pasażerów dla {ride_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return 0
 
 
