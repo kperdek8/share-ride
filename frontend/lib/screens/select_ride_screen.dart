@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../utils/api_config.dart';
+import '../services/matching_service.dart';
 import '../widgets/bottom_navigation_bar.dart';
 import 'active_ride_screen.dart';
 
@@ -38,25 +37,18 @@ class _SelectRideScreenState extends State<SelectRideScreen> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse(ApiConfig.ridesShortTermUrl),
+      final rides = await MatchingService.searchRides(
+        fromAddress: widget.fromAddress,
+        toAddress: widget.toAddress,
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        setState(() {
-          _rides = data.cast<Map<String, dynamic>>();
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _errorMessage = 'Błąd podczas pobierania danych: ${response.statusCode}';
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _rides = rides;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Błąd połączenia: $e';
+        _errorMessage = 'Błąd podczas wyszukiwania przejazdów: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -126,15 +118,45 @@ class _SelectRideScreenState extends State<SelectRideScreen> {
                       ),
                     )
                   else if (_rides.isEmpty)
-                    const Center(
+                    Center(
                       child: Padding(
-                        padding: EdgeInsets.all(32.0),
-                        child: Text(
-                          'Brak dostępnych przejazdów',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Color(0xFF717182),
-                          ),
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.directions_car_outlined,
+                              size: 64,
+                              color: Color(0xFF717182),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Brak dostępnych przejazdów',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF0A0A0A),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Nie znaleziono kierowców w okolicy.\nSpróbuj ponownie za chwilę.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF717182),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _fetchRides,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF155DFC),
+                              ),
+                              child: const Text('Odśwież'),
+                            ),
+                          ],
                         ),
                       ),
                     )
@@ -272,9 +294,12 @@ class _SelectRideScreenState extends State<SelectRideScreen> {
         final sharedPassengers = ride['shared_passengers'] as int?;
         final rating = (ride['driver_rating'] as num?)?.toDouble() ?? 0.0;
         final durationMinutes = ride['duration_minutes'] as int? ?? 0;
+        final pickupEtaMinutes = ride['pickup_eta_minutes'] as int? ?? 0;
+        final totalEtaMinutes = ride['total_eta_minutes'] as int? ?? durationMinutes;
         final extraDurationMinutes = ride['shared_extra_duration_minutes'] as int? ?? 0;
         final pricePln = (ride['price_pln'] as num?)?.toDouble() ?? 0.0;
         final sharedDiscountPln = (ride['shared_discount_pln'] as num?)?.toDouble() ?? 0.0;
+        final distanceKm = (ride['distance_km'] as num?)?.toDouble() ?? 0.0;
         
         // Formatowanie danych dla UI
         String title;
@@ -284,8 +309,11 @@ class _SelectRideScreenState extends State<SelectRideScreen> {
           title = 'Solo - tylko Ty';
         }
         
-        final time = '$durationMinutes min';
-        final extraTime = extraDurationMinutes > 0 ? '+$extraDurationMinutes min' : '+0 min';
+        // Używamy total_eta_minutes jako głównego czasu trasy
+        final time = '$totalEtaMinutes min';
+        // Wyświetlamy czas do odbioru jako dodatkową informację
+        final pickupTime = pickupEtaMinutes > 0 ? 'Odbór: $pickupEtaMinutes min' : '';
+        final extraTime = extraDurationMinutes > 0 ? '+$extraDurationMinutes min' : pickupTime.isNotEmpty ? pickupTime : '+0 min';
         final price = '${pricePln.toStringAsFixed(2)} zł';
         
         String? originalPrice;
@@ -490,14 +518,15 @@ class _SelectRideScreenState extends State<SelectRideScreen> {
                   final driverLastName = selectedRide['driver_last_name'] as String? ?? '';
                   final driverName = '$driverFirstName $driverLastName'.trim();
                   final driverRating = (selectedRide['driver_rating'] as num?)?.toDouble() ?? 0.0;
-                  final durationMinutes = selectedRide['duration_minutes'] as int? ?? 0;
+                  final totalEtaMinutes = selectedRide['total_eta_minutes'] as int? ?? selectedRide['duration_minutes'] as int? ?? 0;
                   final pricePln = (selectedRide['price_pln'] as num?)?.toDouble() ?? 0.0;
+                  final distanceKm = (selectedRide['distance_km'] as num?)?.toDouble() ?? 0.0;
                   
                   // Wartości domyślne dla brakujących danych
                   const carModel = 'Toyota Corolla';
                   const carPlate = 'WA 12345';
-                  final estimatedTime = '$durationMinutes min';
-                  const distance = '12.3 km'; // Można później dodać do API
+                  final estimatedTime = '$totalEtaMinutes min';
+                  final distance = distanceKm > 0 ? '${distanceKm.toStringAsFixed(1)} km' : '12.3 km';
                   final cost = '${pricePln.toStringAsFixed(2)} zł';
                   
                   // Nawigacja do ekranu aktywnego przejazdu

@@ -29,6 +29,8 @@ class MatchingOffer(BaseModel):
     total_eta_minutes: int = Field(..., description="Czas całej trasy od odbioru do celu.")
     distance_km: float
     polyline: str  # Trasa dojazdu od kierowcy do pasażera
+    is_shared: bool = Field(default=False, description="Czy przejazd jest współdzielony")
+    shared_passengers: int = Field(default=0, description="Liczba pasażerów w przejeździe (łącznie z nowym)")
 
 
 class MessageResponse(BaseModel):

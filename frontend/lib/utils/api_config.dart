@@ -39,5 +39,16 @@ class ApiConfig {
       return 'http://localhost:8002';
     }
   }
+  
+  /// Zwraca bazowy URL dla Matching Service (port 8001)
+  static String get matchingServiceBaseUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:8001';
+    } else if (Platform.isIOS) {
+      return 'http://localhost:8001';
+    } else {
+      return 'http://localhost:8001';
+    }
+  }
 }
 
