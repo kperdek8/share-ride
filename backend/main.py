@@ -158,6 +158,25 @@ def geocode_address(address: str) -> Optional[Tuple[float, float]]:
         return None
 
 
+@app.post("/api/geocode")
+async def geocode_endpoint(data: Dict[str, Any]):
+    """
+    Endpoint do konwersji adresu na współrzędne geograficzne.
+    Przyjmuje: {"address": "adres"}
+    Zwraca: {"lat": float, "lng": float}
+    """
+    address = data.get("address", "")
+    if not address:
+        raise HTTPException(status_code=400, detail="Brak adresu w żądaniu")
+    
+    coords = geocode_address(address)
+    if coords is None:
+        raise HTTPException(status_code=404, detail="Nie udało się znaleźć współrzędnych dla podanego adresu")
+    
+    lat, lng = coords
+    return {"lat": lat, "lng": lng}
+
+
 @app.post("/api/simulation/route", response_model=RouteSimulationResponse)
 async def simulate_route(route_request: RouteRequest):
     """
