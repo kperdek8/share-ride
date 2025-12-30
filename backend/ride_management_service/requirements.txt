@@ -8,3 +8,4 @@ motor
 redis
 python-dotenv
 httpx
+ortools

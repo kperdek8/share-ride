@@ -1,7 +1,7 @@
 import os
 import redis.asyncio as redis
 from dotenv import load_dotenv
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from models import RideStatus
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -30,6 +30,28 @@ async def check_database_health() -> bool:
         return True
     except Exception:
         return False
+
+
+async def get_ride_passengers(ride_id: str) -> List[Dict]:
+    """Zwraca listę pasażerów w przejeździe."""
+    if db is None:
+        print(f"Brak połączenia z MongoDB - nie można pobrać liczby pasażerów dla {ride_id}")
+        return []
+    try:
+        print(f"Pobieranie pasażerów dla ride_id: {ride_id}")
+        ride = await db.rides.find_one({"_id": ride_id})
+        if ride:
+            passengers = ride.get("passengers", [])
+            print(f"Pobrano pasażerów: {passengers}")
+            return passengers
+        else:
+            print(f"Przejazd {ride_id} nie znaleziony w MongoDB")
+            return []
+    except Exception as e:
+        print(f"Błąd pobierania liczby pasażerów dla {ride_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 async def get_ride_passenger_count(ride_id: str) -> int:

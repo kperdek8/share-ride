@@ -72,6 +72,22 @@ async def update_ride_location(ride_id: str, location: RideLocation) -> None:
     )
 
 
+async def mark_passenger_as_picked_up(ride_id: str, passenger_id: str):
+    """
+    Aktualizuje status pasażera. Rzuca ValueError jeżeli przejazd nie istnieje albo dany pasażer nie jest w nim zawarty.
+    """
+    result = await db.rides.update_one(
+        {"_id": ride_id, "passengers.passenger_id": passenger_id},
+        {"$set": {"passengers.$.picked_up": True}}
+    )
+
+    if result.matched_count == 0:
+        raise ValueError(
+            f"Brak przejazdu {ride_id} z pasażerem {passenger_id}"
+        )
+    return True
+
+
 async def set_driver_available(availability_data: DriverAvailability) -> None:
     """
     Ustawia status kierowcy na AVAILABLE.
@@ -128,8 +144,6 @@ async def get_driver_rides(driver_id: str, status: str | None = None):
 
     return rides
 
-# FUNKCJE POMOCNICZE
-
 
 async def update_ride_status(ride_id: str, driver_id: str, new_status: RideStatus) -> str:
     current_time = datetime.datetime.now(datetime.timezone.utc)
@@ -182,6 +196,9 @@ async def update_ride_status(ride_id: str, driver_id: str, new_status: RideStatu
     return new_status.value
 
 
+# FUNKCJE POMOCNICZE
+
+
 async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
     """Tworzy dokument w Mongo i aktualizuje Redis."""
     current_time = datetime.datetime.now(datetime.timezone.utc)
@@ -209,7 +226,8 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
         "passengers": [{
             "passenger_id": data.passenger_id,
             "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
-            "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng}
+            "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
+            "picked_up": False
         }],
         "route_data": route_data,
         "created_at": current_time,
@@ -297,7 +315,8 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
     all_passengers = current_passengers + [{
         "passenger_id": data.passenger_id,
         "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
-        "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng}
+        "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
+        "picked_up": False
     }]
     
     # Przygotuj dane dla get_full_trip_route
@@ -305,11 +324,13 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
     for p in all_passengers:
         pickup = p.get("pickup", {})
         dropoff = p.get("dropoff", {})
+        is_picked_up = p.get("picked_up", False)
         active_passengers.append({
-            "pickup_lat": pickup.get("lat"),
-            "pickup_lng": pickup.get("lng"),
-            "dropoff_lat": dropoff.get("lat"),
-            "dropoff_lng": dropoff.get("lng"),
+            "p_lat": pickup.get("lat"),
+            "p_lng": pickup.get("lng"),
+            "d_lat": dropoff.get("lat"),
+            "d_lng": dropoff.get("lng"),
+            "picked_up": is_picked_up
         })
     
     # Oblicz nową trasę uwzględniającą wszystkich pasażerów
@@ -319,7 +340,7 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
         driver_lng=driver_lng,
         active_passengers=active_passengers
     )
-    
+
     if not new_route_data:
         raise RuntimeError("Błąd podczas wyznaczania trasy przez Google API.")
     
@@ -330,7 +351,8 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
             "$push": {"passengers": {
                 "passenger_id": data.passenger_id,
                 "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
-                "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng}
+                "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
+                "picked_up": False
             }},
             "$set": {
                 "route_data": new_route_data,

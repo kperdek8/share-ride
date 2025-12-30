@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 
 from models import RideSearchRequest, MatchingOffer, MessageResponse, RideStatus
-from google_maps import get_directions
-from database import check_database_health, redis_client, get_nearby_drivers_from_redis, get_driver_status, mongo_client, get_ride_passenger_count
+from google_maps import get_directions, get_full_trip_route
+from database import check_database_health, redis_client, get_nearby_drivers_from_redis, get_driver_status, mongo_client, get_ride_passenger_count, get_ride_passengers
 
 app = FastAPI(
     title="ShareRide Matching Service",
@@ -126,11 +126,30 @@ async def find_ride_offers(request: RideSearchRequest):
                         # Sprawdzamy czy kierowca może przyjąć kolejnego pasażera (max 4 pasażerów)
                         if passenger_count < 4:
                             print(f"Kierowca {driver_id} może przyjąć pasażera (obecnie: {passenger_count}/4)")
-                            directions = await get_directions(
-                                origin_lat=lat, origin_lng=lng,
-                                dest_lat=request.dropoff_lat, dest_lng=request.dropoff_lng,
-                                waypoints=[(request.pickup_lat, request.pickup_lng)]
-                            )
+
+                            new_passenger = {
+                                "passenger_id": "placeholder",
+                                "pickup": {
+                                    "lat": request.pickup_lat,
+                                    "lng": request.pickup_lng
+                                },
+                                "dropoff": {
+                                    "lat": request.dropoff_lat,
+                                    "lng": request.dropoff_lng
+                                },
+                                "picked_up": False
+                            }
+                            passengers = await get_ride_passengers(ride_id) + [new_passenger]
+
+                            passengers = [{
+                                "p_lat": p["pickup"]["lat"],
+                                "p_lng": p["pickup"]["lng"],
+                                "d_lat": p["dropoff"]["lat"],
+                                "d_lng": p["dropoff"]["lng"],
+                                "picked_up": p["picked_up"]
+                            } for p in passengers]
+
+                            directions = await get_full_trip_route(lat, lng, passengers)
 
                             print(f"Directions dla {driver_id}: {directions}")
                             if directions and "pickup_eta_min" in directions:
@@ -139,6 +158,8 @@ async def find_ride_offers(request: RideSearchRequest):
                                 
                                 offer = MatchingOffer(
                                     driver_id=driver_id,
+                                    # TODO: Zmodyfikować get_full_trip_route żeby zwracał poprawny Pickup ETA (aktualnie jest to czas pierwszego lega)
+                                    # Najlepiej chyba przez podawanie do get_directions opcjonalnie indeksu punktu odbioru pasażera
                                     pickup_eta_minutes=directions.get("pickup_eta_min", 0),
                                     total_eta_minutes=directions["duration_min"] + extra_time,
                                     distance_km=directions["distance_km"],

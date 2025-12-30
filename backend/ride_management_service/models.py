@@ -23,6 +23,7 @@ class PassengerItem(BaseModel):
     passenger_id: str
     pickup: Location
     dropoff: Location
+    picked_up: bool
 
 
 class RouteData(BaseModel):
@@ -66,6 +67,13 @@ class RideStatusUpdate(BaseModel):
     """Model danych wejściowych dla aktualizacji statusu z użyciem."""
 
     new_status: RideStatus = Field(..., description="Nowy, dozwolony status przejazdu.")
+    driver_id: str = Field(..., description="ID kierowcy, który wykonuje aktualizację (będzie zamienione na odczyt id z tokenu dostępu).")
+
+
+class RidePickupUpdate(BaseModel):
+    """Model danych wejściowych dla potwierdzenia odbioru pasażera."""
+
+    passenger_id: str = Field(..., description="ID pasażera, który został odebrany")
     driver_id: str = Field(..., description="ID kierowcy, który wykonuje aktualizację (będzie zamienione na odczyt id z tokenu dostępu).")
 
 
