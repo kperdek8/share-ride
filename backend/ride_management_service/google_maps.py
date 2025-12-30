@@ -36,7 +36,7 @@ async def get_directions(
         "intermediates": intermediates,
         "travelMode": "DRIVE",
         "routingPreference": "ROUTING_PREFERENCE_UNSPECIFIED",
-        "polylineQuality": "HIGH_QUALITY",
+        # "polylineQuality": "HIGH_QUALITY", # Na razie wyłączę, zwykła precyzja chyba wystarczy
         "polylineEncoding": "ENCODED_POLYLINE",
     }
 

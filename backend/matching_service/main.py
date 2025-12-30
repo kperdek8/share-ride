@@ -127,19 +127,16 @@ async def find_ride_offers(request: RideSearchRequest):
                         if passenger_count < 4:
                             print(f"Kierowca {driver_id} może przyjąć pasażera (obecnie: {passenger_count}/4)")
 
+                            # Przygotowanie danych o nowym pasażeru
                             new_passenger = {
-                                "passenger_id": "placeholder",
-                                "pickup": {
-                                    "lat": request.pickup_lat,
-                                    "lng": request.pickup_lng
-                                },
-                                "dropoff": {
-                                    "lat": request.dropoff_lat,
-                                    "lng": request.dropoff_lng
-                                },
+                                "p_lat": request.pickup_lat,
+                                "p_lng": request.pickup_lng,
+                                "d_lat": request.dropoff_lat,
+                                "d_lng": request.dropoff_lng,
                                 "picked_up": False
                             }
-                            passengers = await get_ride_passengers(ride_id) + [new_passenger]
+                            # Pobranie obecnych pasażerów
+                            passengers = await get_ride_passengers(ride_id)
 
                             passengers = [{
                                 "p_lat": p["pickup"]["lat"],
@@ -149,7 +146,8 @@ async def find_ride_offers(request: RideSearchRequest):
                                 "picked_up": p["picked_up"]
                             } for p in passengers]
 
-                            directions = await get_full_trip_route(lat, lng, passengers)
+                            # Wywołujemy funkcję podając nowego pasażera osobno żeby uzyskać prawidłowy Pickup ETA time
+                            directions = await get_full_trip_route(lat, lng, passengers, new_passenger)
 
                             print(f"Directions dla {driver_id}: {directions}")
                             if directions and "pickup_eta_min" in directions:
@@ -158,8 +156,6 @@ async def find_ride_offers(request: RideSearchRequest):
                                 
                                 offer = MatchingOffer(
                                     driver_id=driver_id,
-                                    # TODO: Zmodyfikować get_full_trip_route żeby zwracał poprawny Pickup ETA (aktualnie jest to czas pierwszego lega)
-                                    # Najlepiej chyba przez podawanie do get_directions opcjonalnie indeksu punktu odbioru pasażera
                                     pickup_eta_minutes=directions.get("pickup_eta_min", 0),
                                     total_eta_minutes=directions["duration_min"] + extra_time,
                                     distance_km=directions["distance_km"],
