@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import redis.asyncio as redis
 from dotenv import load_dotenv
-from google_maps import get_directions
+from google_maps import get_directions, get_full_trip_route
 from models import (
     DriverAvailability,
     RideLocation,
@@ -70,6 +70,27 @@ async def update_ride_location(ride_id: str, location: RideLocation) -> None:
             "last_update": int(current_time.timestamp()),
         },
     )
+
+
+async def get_ride_location_and_polyline(ride_id: str):
+    """
+    Odczytuje bieżącą pozycję GPS oraz zapisaną polilinię trasy z Redis.
+    """
+    redis_key = f"ride:{ride_id}"
+
+    # Pobieramy wszystkie interesujące nas pola
+    data = await redis_client.hmget(
+        redis_key,
+        ["lat", "lng", "polyline"]
+    )
+
+    if not data or data[0] is None:
+        return None
+
+    print(data)
+    lat, lng, polyline = float(data[0]), float(data[1]), data[2]
+
+    return lat, lng, polyline
 
 
 async def mark_passenger_as_picked_up(ride_id: str, passenger_id: str):
@@ -199,23 +220,29 @@ async def update_ride_status(ride_id: str, driver_id: str, new_status: RideStatu
 # FUNKCJE POMOCNICZE
 
 
-async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
-    """Tworzy dokument w Mongo i aktualizuje Redis."""
+async def _handle_new_ride_creation(data: RideJoinRequest, start_coords: Tuple[float, float]):
+    """Tworzy dokument w Mongo i aktualizuje Redis, wykorzystując optymalizację trasy."""
     current_time = datetime.datetime.now(datetime.timezone.utc)
 
-    driver_lat = start_coords[0]
-    driver_lng = start_coords[1]
+    driver_lat, driver_lng = start_coords
 
-    route_data = await get_directions(
-        origin_lat=driver_lat,
-        origin_lng=driver_lng,
-        dest_lat=data.dropoff_lat,
-        dest_lng=data.dropoff_lng,
-        waypoints=[(data.pickup_lat, data.pickup_lng)]
+    passengers = [{
+        "p_lat": data.pickup_lat,
+        "p_lng": data.pickup_lng,
+        "d_lat": data.dropoff_lat,
+        "d_lng": data.dropoff_lng,
+        "picked_up": False
+    }]
+
+    # Obliczamy optymalną trasę (Kierowca -> Pickup -> Dropoff)
+    route_data = await get_full_trip_route(
+        driver_lat=driver_lat,
+        driver_lng=driver_lng,
+        active_passengers=passengers
     )
 
     if not route_data:
-        raise RuntimeError("Błąd podczas wyznaczania trasy przez Google API.")
+        raise RuntimeError("Błąd podczas wyznaczania trasy przez silnik optymalizacji.")
 
     # Pełny zapis do MongoDB
     ride_id = str(uuid.uuid4())
@@ -236,20 +263,21 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords):
 
     await db.rides.insert_one(new_ride)
 
-    # Zapis obecnej pozycji przejazdu do Redis
+    # Zapis stanu do Redis
     redis_key = f"ride:{ride_id}"
     await redis_client.hset(
         redis_key,
         mapping={
             "status": RideStatus.PENDING.value,
-            "lat": start_coords[0],
-            "lng": start_coords[1],
+            "lat": driver_lat,
+            "lng": driver_lng,
             "driver_id": data.driver_id,
+            "polyline": route_data["polyline"],
             "last_update": int(current_time.timestamp()),
         },
     )
 
-    # Synchronizacja wpisow w bazie
+    # Synchronizacja statusu w bazie
     await update_ride_status(ride_id, data.driver_id, RideStatus.PENDING)
 
     return {
@@ -334,7 +362,6 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
         })
     
     # Oblicz nową trasę uwzględniającą wszystkich pasażerów
-    from google_maps import get_full_trip_route
     new_route_data = await get_full_trip_route(
         driver_lat=driver_lat,
         driver_lng=driver_lng,
@@ -360,7 +387,16 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
             }
         }
     )
-    
+
+    # Zaktualizuj polyline w Redis
+    await redis_client.hset(
+        f"ride:{ride_id}",
+        mapping={
+            "polyline": new_route_data["polyline"],
+            "last_update": int(current_time.timestamp())
+        }
+    )
+
     return {
         "ride_id": ride_id,
         "driver_id": data.driver_id,

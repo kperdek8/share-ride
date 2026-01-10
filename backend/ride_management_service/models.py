@@ -105,10 +105,17 @@ class DriverRidesResponse(BaseModel):
 
 
 class RideJoinResponse(BaseModel):
-    """Standardowa struktura odpowiedzi."""
+    """Odpowiedz żądania o dołączenie do przejazdu"""
     ride_id: str
     driver_id: str
     status: RideStatus
+
+
+class RideGetPositionResponse(BaseModel):
+    """Odpowiedz żądania o lokalizacje przejazdu."""
+    ride_id: str
+    location: Location
+    polyline: str
 
 
 class MessageResponse(BaseModel):

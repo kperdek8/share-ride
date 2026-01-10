@@ -7,7 +7,7 @@ from database import (
     remove_driver_availability,
     set_driver_available,
     update_ride_location,
-    update_ride_status, mark_passenger_as_picked_up,
+    update_ride_status, mark_passenger_as_picked_up, get_ride_location_and_polyline
 )
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +16,7 @@ from models import (
     DriverRidesQuery,
     DriverRidesResponse,
     MessageResponse,
+    RideGetPositionResponse,
     RidePickupUpdate,
     RideJoinRequest,
     RideJoinResponse,
@@ -123,6 +124,23 @@ async def pickup_update_endpoint(ride_id: str, pickup_update: RidePickupUpdate):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Błąd przy potwierdzeniu odbioru pasażera: {e}",
+        )
+
+
+@app.get("/api/rides/{ride_id}/location", response_model=RideGetPositionResponse)
+async def get_ride_location_endpoint(ride_id: str):
+    """Pobiera bieżącą pozycję GPS i trasę z Redis."""
+    try:
+        lat, lng, polyline = await get_ride_location_and_polyline(ride_id)
+        location = {
+            "lat": lat,
+            "lng": lng
+        }
+        return {"ride_id": ride_id, "location": location, "polyline": polyline}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Błąd serwera: {e}",
         )
 
 
