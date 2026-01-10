@@ -33,13 +33,7 @@ curl -X PATCH "http://localhost:8002/api/rides/98f4b377-7010-420e-b3f3-fbe08122d
 
 Odczytanie lokalizacji (zamień ID przejazdu)
 ```
-curl -X PATCH "http://localhost:8002/api/rides/98f4b377-7010-420e-b3f3-fbe08122d696/location" \
-     -H "Content-Type: application/json" \
-     -d '{
-         "lat": 51.1079,
-         "lng": 17.0385,
-         "timestamp": 1700000001
-     }'
+curl -X GET "http://localhost:8002/api/rides/98f4b377-7010-420e-b3f3-fbe08122d696/location" \
 ```
 
 Podgląd przejazdów kierowcy
