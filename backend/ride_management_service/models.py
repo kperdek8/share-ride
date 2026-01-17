@@ -77,6 +77,13 @@ class RidePickupUpdate(BaseModel):
     driver_id: str = Field(..., description="ID kierowcy, który wykonuje aktualizację (będzie zamienione na odczyt id z tokenu dostępu).")
 
 
+class RideDropoutUpdate(BaseModel):
+    """Model danych wejściowych dla potwierdzenia wysadzenia pasażera."""
+
+    passenger_id: str = Field(..., description="ID pasażera, który został wysadzony")
+    driver_id: str = Field(..., description="ID kierowcy, który wykonuje aktualizację (będzie zamienione na odczyt id z tokenu dostępu).")
+
+
 class DriverAvailability(BaseModel):
     """Model zgłaszania gotowości do przyjęcia pierwszego zlecenia."""
 

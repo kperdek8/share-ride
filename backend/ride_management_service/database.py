@@ -59,16 +59,32 @@ async def update_ride_location(ride_id: str, location: RideLocation) -> None:
     """
     Aktualizuje bieżącą pozycję GPS w Redis.
     """
-    redis_key = f"ride:{ride_id}"
+    ride_key = f"ride:{ride_id}"
+    driver_id = await redis_client.hget(ride_key, "driver_id")
+    driver_key = f"driver_status:{driver_id}"
     current_time = datetime.datetime.now(datetime.timezone.utc)
 
     await redis_client.hset(
-        redis_key,
+        ride_key,
         mapping={
             "lat": location.lat,
             "lng": location.lng,
             "last_update": int(current_time.timestamp()),
-        },
+        }
+    )
+
+    await redis_client.hset(
+        driver_key,
+        mapping={
+            "lat": location.lat,
+            "lng": location.lng,
+            "last_update": int(current_time.timestamp()),
+        }
+    )
+
+    await redis_client.geoadd(
+        "drivers_locations",
+        [location.lng, location.lat, str(driver_id)]
     )
 
 
@@ -99,7 +115,33 @@ async def mark_passenger_as_picked_up(ride_id: str, passenger_id: str):
     """
     result = await db.rides.update_one(
         {"_id": ride_id, "passengers.passenger_id": passenger_id},
-        {"$set": {"passengers.$.picked_up": True}}
+        {"$set": {
+            "passengers.$.picked_up": True,
+            "updated_at": datetime.datetime.now(datetime.timezone.utc)
+        }}
+    )
+
+    if result.matched_count == 0:
+        raise ValueError(
+            f"Brak przejazdu {ride_id} z pasażerem {passenger_id}"
+        )
+    return True
+
+
+async def mark_passenger_as_dropped_out(ride_id: str, passenger_id: str):
+    """
+    Aktualizuje status pasażera. Rzuca ValueError jeżeli przejazd nie istnieje albo dany pasażer nie jest w nim zawarty.
+    """
+    result = await db.rides.update_one(
+        {"_id": ride_id, "passengers.passenger_id": passenger_id},
+        {
+            "$pull": {
+                "passengers": {"passenger_id": passenger_id}
+            },
+            "$set": {
+                "updated_at": datetime.datetime.now(datetime.timezone.utc)
+            }
+        }
     )
 
     if result.matched_count == 0:
@@ -402,3 +444,96 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
         "driver_id": data.driver_id,
         "status": existing_ride.get("status", RideStatus.ACTIVE.value)
     }
+
+
+async def recalculate_and_update_route(ride_id: str = None):
+    """
+    Przelicza trasę dla trwającego przejazdu i aktualizuje Redis oraz MongoDB.
+    """
+    current_time = datetime.datetime.now(datetime.timezone.utc)
+
+    ride = await db.rides.find_one({"_id": ride_id})
+    driver_id = ride.get("driver_id")
+    driver_lat, driver_lng = await _get_driver_coords(driver_id_str=driver_id)
+
+    passengers = ride.get("passengers", [])
+
+    # Sprawdzenie, czy są jeszcze jacyś pasażerowie do obsłużenia
+    if not passengers:
+        print(f"Przejazd {ride_id}: Brak pasażerów, czyszczenie trasy w Redis")
+
+        # Zapis trasy jako ukończonej w MongoDB
+        await db.rides.update_one(
+            {"_id": ride_id},
+            {
+                "$set": {
+                    "status": RideStatus.COMPLETED.value,
+                    "route_data": None,
+                    "updated_at": current_time
+                }
+            }
+        )
+
+        # Usunięcie trasy z Redis
+        await redis_client.delete(f"ride:{ride_id}")
+
+        # Zaktualizowanie statusu kierowcy
+        if driver_id:
+            await redis_client.hset(
+                f"driver_status:{driver_id}",
+                mapping={
+                    "status": RideStatus.COMPLETED.value,
+                    "lat": driver_lat,
+                    "lng": driver_lng,
+                    "last_update": int(current_time.timestamp()),
+                }
+            )
+        return
+
+
+    # Przygotowanie danych pasażerów dla OR-Tools
+    active_passengers_for_optimizer = []
+
+    for p in passengers:
+        # Mapowanie struktury z Mongo na strukturę dla solve_optimal_order
+        active_passengers_for_optimizer.append({
+            "passenger_id": p["passenger_id"],
+            "p_lat": p["pickup"]["lat"],
+            "p_lng": p["pickup"]["lng"],
+            "d_lat": p["dropoff"]["lat"],
+            "d_lng": p["dropoff"]["lng"],
+            "picked_up": p.get("picked_up", False)
+        })
+
+    # Rekalkulacja trasy
+    new_route_data = await get_full_trip_route(
+        driver_lat=driver_lat,
+        driver_lng=driver_lng,
+        active_passengers=active_passengers_for_optimizer
+    )
+
+    if not new_route_data:
+        print(f"Nie udało się przeliczyć trasy dla {ride_id}")
+        return
+
+    # Aktualizacja MongoDB
+    await db.rides.update_one(
+        {"_id": ride_id},
+        {
+            "$set": {
+                "route_data": new_route_data,
+                "updated_at": current_time
+            }
+        }
+    )
+
+    # Aktualizacja Redis
+    await redis_client.hset(
+        f"ride:{ride_id}",
+        mapping={
+            "polyline": new_route_data["polyline"],
+            "last_update": int(current_time.timestamp())
+        }
+    )
+
+    print(f"Trasa przejazdu {ride_id} została zaktualizowana.")

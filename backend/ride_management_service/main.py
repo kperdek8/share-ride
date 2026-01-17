@@ -7,7 +7,7 @@ from database import (
     remove_driver_availability,
     set_driver_available,
     update_ride_location,
-    update_ride_status, mark_passenger_as_picked_up, get_ride_location_and_polyline
+    update_ride_status, mark_passenger_as_picked_up, get_ride_location_and_polyline, mark_passenger_as_dropped_out, recalculate_and_update_route
 )
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +16,7 @@ from models import (
     DriverRidesQuery,
     DriverRidesResponse,
     MessageResponse,
+    RideDropoutUpdate,
     RideGetPositionResponse,
     RidePickupUpdate,
     RideJoinRequest,
@@ -113,6 +114,7 @@ async def pickup_update_endpoint(ride_id: str, pickup_update: RidePickupUpdate):
     """Potwierdza odbiór pasażera"""
     try:
         await mark_passenger_as_picked_up(ride_id, pickup_update.passenger_id)
+        await recalculate_and_update_route(ride_id)
         return {
             "ride_id": ride_id,
             "message": f"Potwierdzono odbiór pasażera: {pickup_update.passenger_id}",
@@ -124,6 +126,26 @@ async def pickup_update_endpoint(ride_id: str, pickup_update: RidePickupUpdate):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Błąd przy potwierdzeniu odbioru pasażera: {e}",
+        )
+
+
+@app.patch("/api/rides/{ride_id}/drop", response_model=MessageResponse)
+async def dropout_update_endpoint(ride_id: str, pickup_update: RideDropoutUpdate):
+    """Potwierdza odbiór pasażera"""
+    try:
+        await mark_passenger_as_dropped_out(ride_id, pickup_update.passenger_id)
+        await recalculate_and_update_route(ride_id)
+        return {
+            "ride_id": ride_id,
+            "message": f"Potwierdzono wysadzenie pasażera: {pickup_update.passenger_id}",
+        }
+    except ValueError as e:
+        # Przejazd nie znaleziony
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Błąd przy potwierdzeniu wysadzenia pasażera: {e}",
         )
 
 
