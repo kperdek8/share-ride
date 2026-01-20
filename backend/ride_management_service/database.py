@@ -267,13 +267,15 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords: Tuple[f
     current_time = datetime.datetime.now(datetime.timezone.utc)
 
     driver_lat, driver_lng = start_coords
+    deadline = data.dropoff_deadline
 
     passengers = [{
         "p_lat": data.pickup_lat,
         "p_lng": data.pickup_lng,
         "d_lat": data.dropoff_lat,
         "d_lng": data.dropoff_lng,
-        "picked_up": False
+        "picked_up": False,
+        "deadline": deadline
     }]
 
     # Obliczamy optymalną trasę (Kierowca -> Pickup -> Dropoff)
@@ -296,7 +298,8 @@ async def _handle_new_ride_creation(data: RideJoinRequest, start_coords: Tuple[f
             "passenger_id": data.passenger_id,
             "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
             "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
-            "picked_up": False
+            "picked_up": False,
+            "deadline": deadline
         }],
         "route_data": route_data,
         "created_at": current_time,
@@ -380,12 +383,14 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
             raise ValueError("Nie można określić pozycji kierowcy.")
     
     driver_lat, driver_lng = driver_coords
-    
+    deadline = data.dropoff_deadline
+
     # Przygotuj listę wszystkich pasażerów (istniejących + nowy)
     all_passengers = current_passengers + [{
         "passenger_id": data.passenger_id,
         "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
         "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
+        "deadline": deadline,
         "picked_up": False
     }]
     
@@ -400,7 +405,8 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
             "p_lng": pickup.get("lng"),
             "d_lat": dropoff.get("lat"),
             "d_lng": dropoff.get("lng"),
-            "picked_up": is_picked_up
+            "picked_up": is_picked_up,
+            "deadline": p.get("deadline")
         })
     
     # Oblicz nową trasę uwzględniającą wszystkich pasażerów
@@ -421,7 +427,8 @@ async def _handle_shared_ride_join(data: RideJoinRequest, ride_id: str, driver_c
                 "passenger_id": data.passenger_id,
                 "pickup": {"lat": data.pickup_lat, "lng": data.pickup_lng},
                 "dropoff": {"lat": data.dropoff_lat, "lng": data.dropoff_lng},
-                "picked_up": False
+                "picked_up": False,
+                "deadline": deadline
             }},
             "$set": {
                 "route_data": new_route_data,
@@ -502,14 +509,16 @@ async def recalculate_and_update_route(ride_id: str = None):
             "p_lng": p["pickup"]["lng"],
             "d_lat": p["dropoff"]["lat"],
             "d_lng": p["dropoff"]["lng"],
-            "picked_up": p.get("picked_up", False)
+            "picked_up": p.get("picked_up", False),
+            "deadline": p["deadline"]
         })
 
     # Rekalkulacja trasy
     new_route_data = await get_full_trip_route(
         driver_lat=driver_lat,
         driver_lng=driver_lng,
-        active_passengers=active_passengers_for_optimizer
+        active_passengers=active_passengers_for_optimizer,
+        recalculation=True
     )
 
     if not new_route_data:

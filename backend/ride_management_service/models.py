@@ -54,6 +54,7 @@ class RideJoinRequest(BaseModel):
     pickup_lng: float
     dropoff_lat: float
     dropoff_lng: float
+    dropoff_deadline: Optional[datetime] = Field(..., description="Data i godzina, o której pasażer chce być na miejscu (ISO 8601)")
 
 
 class RideLocation(BaseModel):

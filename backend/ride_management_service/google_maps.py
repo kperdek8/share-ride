@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import httpx
 import os
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
@@ -111,7 +113,8 @@ async def get_distance_matrix(locations: list[tuple[float, float]]):
         # Mapujemy wyniki do macierzy
         for entry in results:
             # Niektóre wpisy mogą zawierać błędy (np. brak drogi)
-            if entry.get("status", {}).get("code"):
+            status = entry.get("status", {})
+            if status and status.get("code") is not None and status.get("code") != 0:
                 duration = 999999  # "Infinity" dla OR-Tools
             else:
                 # Czas jest zwracany jako string "123s"
@@ -126,20 +129,32 @@ async def get_distance_matrix(locations: list[tuple[float, float]]):
         return matrix
 
 
-async def solve_optimal_order(driver_coords, passengers):
+async def solve_optimal_order(driver_coords, passengers, use_soft_deadlines=False):
     """
     driver_coords: (lat, lng)
-    passengers: list[dict] -> [{"p_lat":..., "p_lng":..., "d_lat":..., "d_lng":..., "picked_up": bool}]
+    passengers: list[dict] -> [{"p_lat":..., "p_lng":..., "d_lat":..., "d_lng":..., "picked_up": bool, "deadline": datetime}]
+    use_soft_deadlines: bool - czy użyć miękkich deadline'ów (używane przy rekalkulacji trasy, która musi zwrócić trasę)
     """
     # 1. Tworzymy listę wszystkich fizycznych lokalizacji
     # Punkt 0: Kierowca (Start)
+    now = datetime.now(timezone.utc)
     locations = [driver_coords]
     pickup_delivery_pairs = []
+    dropoff_constraints = []  # Lista krotek: (dropoff_node_idx, deadline_delta_seconds)
 
     current_idx = 1
 
     for p in passengers:
         p_idx = None
+
+        # Sprawdzenie deadline'u
+        deadline = p["deadline"].replace(tzinfo=timezone.utc) if p["deadline"].tzinfo is None else p["deadline"]
+        time_left_seconds = (deadline - now).total_seconds()
+        # Jeśli deadline już minął, trasa jest niemożliwa
+        if time_left_seconds < 0:
+            print(f"Deadline pasażera {p.get('passenger_id')} już minął ({time_left_seconds}s).")
+            return None
+
         # Jeśli pasażer nie jest w aucie, musi mieć Pickup
         if not p["picked_up"]:
             locations.append((p["p_lat"], p["p_lng"]))
@@ -149,6 +164,10 @@ async def solve_optimal_order(driver_coords, passengers):
         # Każdy pasażer musi mieć Dropoff
         locations.append((p["d_lat"], p["d_lng"]))
         d_idx = current_idx
+
+        # Zapisujemy, że ten węzeł (d_idx) ma konkretny limit czasu
+        dropoff_constraints.append((d_idx, int(time_left_seconds)))
+
         current_idx += 1
 
         if p_idx is not None:
@@ -161,26 +180,50 @@ async def solve_optimal_order(driver_coords, passengers):
     manager = pywrapcp.RoutingIndexManager(len(locations), 1, 0)
     routing = pywrapcp.RoutingModel(manager)
 
-    def distance_callback(from_index, to_index):
+    def time_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
         return dist_matrix[from_node][to_node]
 
-    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    transit_callback_index = routing.RegisterTransitCallback(time_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
     # Dodanie wymiaru odległości/czasu dla restrykcji
-    routing.AddDimension(transit_callback_index, 0, 100000, True, "Distance")
-    distance_dimension = routing.GetDimensionOrDie("Distance")
+    routing.AddDimension(
+        transit_callback_index,
+        180,
+        86400,
+        True,
+        "Time"
+    )
+    time_dimension = routing.GetDimensionOrDie("Time")
 
-    # KLUCZ: Wymuszenie Pickup -> Delivery
+    # Ograniczenia czasowe
+    for node_idx, deadline_sec in dropoff_constraints:
+        index = manager.NodeToIndex(node_idx)
+        if use_soft_deadlines:
+            time_dimension.CumulVar(index).SetRange(0, 86400)
+            time_dimension.SetCumulVarSoftUpperBound(
+                index,
+                deadline_sec,
+                100
+            )
+        else:
+            # Jeśli nie zdążymy, nie chcemy dołączać pasażera.
+            try:
+                time_dimension.CumulVar(index).SetRange(0, deadline_sec)
+            except Exception as e:
+                print(f"Błąd ustawiania deadline'u: {e}")
+                return None
+
+    # Wymuszenie Pickup -> Delivery
     for p_idx, d_idx in pickup_delivery_pairs:
         pickup_index = manager.NodeToIndex(p_idx)
         delivery_index = manager.NodeToIndex(d_idx)
         routing.AddPickupAndDelivery(pickup_index, delivery_index)
         routing.solver().Add(
-            distance_dimension.CumulVar(pickup_index) <=
-            distance_dimension.CumulVar(delivery_index)
+            time_dimension.CumulVar(pickup_index) <=
+            time_dimension.CumulVar(delivery_index)
         )
 
     # 4. Rozwiązanie
@@ -205,12 +248,13 @@ async def solve_optimal_order(driver_coords, passengers):
         print(ordered_points)
         return ordered_points
 
+    print("Nie znaleziono rozwiązania spełniającego deadline'y.")
     return None
 
 
-async def get_full_trip_route(driver_lat: float, driver_lng: float, active_passengers: list[dict]):
+async def get_full_trip_route(driver_lat: float, driver_lng: float, active_passengers: list[dict], recalculation: bool = False):
     # 1. Oblicz optymalną kolejność punktów (OR-Tools)
-    ordered_coords = await solve_optimal_order((driver_lat, driver_lng), active_passengers)
+    ordered_coords = await solve_optimal_order((driver_lat, driver_lng), active_passengers, recalculation)
 
     if not ordered_coords:
         return None

@@ -99,17 +99,22 @@ async def find_ride_offers(request: RideSearchRequest):
 
                 # Kierowca dostępny - nowy przejazd (solo)
                 if status == RideStatus.AVAILABLE:
-                    directions = await get_directions(
-                        origin_lat=lat, origin_lng=lng,
-                        dest_lat=request.dropoff_lat, dest_lng=request.dropoff_lng,
-                        waypoints=[(request.pickup_lat, request.pickup_lng)]
-                    )
+                    new_passenger = {
+                        "p_lat": request.pickup_lat,
+                        "p_lng": request.pickup_lng,
+                        "d_lat": request.dropoff_lat,
+                        "d_lng": request.dropoff_lng,
+                        "picked_up": False,
+                        "deadline": request.dropoff_deadline
+                    }
+                    directions = await get_full_trip_route(driver_lat=lat, driver_lng=lng, active_passengers=[], new_passenger=new_passenger)
 
                     if directions and "pickup_eta_min" in directions:
                         offers.append(MatchingOffer(
                             driver_id=driver_id,
                             pickup_eta_minutes=directions.get("pickup_eta_min", 0),
-                            total_eta_minutes=directions["duration_min"],
+                            dropoff_eta_minutes=directions.get("dropoff_eta_min", 0),
+                            total_eta_minutes=directions["total_eta_min"],
                             distance_km=directions["distance_km"],
                             polyline=directions["polyline"],
                             is_shared=False,
@@ -133,7 +138,8 @@ async def find_ride_offers(request: RideSearchRequest):
                                 "p_lng": request.pickup_lng,
                                 "d_lat": request.dropoff_lat,
                                 "d_lng": request.dropoff_lng,
-                                "picked_up": False
+                                "picked_up": False,
+                                "deadline": request.dropoff_deadline
                             }
                             # Pobranie obecnych pasażerów
                             passengers = await get_ride_passengers(ride_id)
@@ -143,7 +149,8 @@ async def find_ride_offers(request: RideSearchRequest):
                                 "p_lng": p["pickup"]["lng"],
                                 "d_lat": p["dropoff"]["lat"],
                                 "d_lng": p["dropoff"]["lng"],
-                                "picked_up": p["picked_up"]
+                                "picked_up": p["picked_up"],
+                                "deadline": p["deadline"]
                             } for p in passengers]
 
                             # Wywołujemy funkcję podając nowego pasażera osobno żeby uzyskać prawidłowy Pickup ETA time
@@ -152,16 +159,17 @@ async def find_ride_offers(request: RideSearchRequest):
                             print(f"Directions dla {driver_id}: {directions}")
                             if directions and "pickup_eta_min" in directions:
                                 # Dla przejazdów współdzielonych dodajemy 10% czasu na dodatkowe przystanki
-                                extra_time = max(2, int(directions["duration_min"] * 0.1))
+                                extra_time = max(2, int(directions["total_eta_min"] * 0.1))
                                 
                                 offer = MatchingOffer(
                                     driver_id=driver_id,
                                     pickup_eta_minutes=directions.get("pickup_eta_min", 0),
-                                    total_eta_minutes=directions["duration_min"] + extra_time,
+                                    dropoff_eta_minutes=directions.get("dropoff_eta_min", 0),
+                                    total_eta_minutes=directions["total_eta_min"] + extra_time,
                                     distance_km=directions["distance_km"],
                                     polyline=directions["polyline"],
                                     is_shared=True,
-                                    shared_passengers=passenger_count + 1  # +1 dla nowego pasażera
+                                    shared_passengers=passenger_count
                                 )
                                 print(f"Dodano ofertę współdzieloną: {offer}")
                                 offers.append(offer)
